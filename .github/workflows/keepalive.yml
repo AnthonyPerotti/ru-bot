@@ -1,0 +1,38 @@
+name: Keep Alive
+
+# GitHub disables scheduled workflows on repos inactive for 60 days.
+# This workflow commits a weekly timestamp to keep the repo active.
+# Based on: https://github.com/marketplace/actions/keepalive-workflow
+
+on:
+  schedule:
+    # Every Sunday at 06h BRT (09h UTC)
+    - cron: "0 9 * * 0"
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    name: Refresh activity timestamp
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Use the dedicated token so the push triggers other workflows if needed
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write activity timestamp
+        run: |
+          mkdir -p .github
+          echo "Last keep-alive: $(date -u '+%Y-%m-%d %H:%M UTC')" > .github/keepalive.txt
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive.txt
+          git diff --cached --quiet || git commit -m "chore: keep-alive [skip ci]"
+          git push

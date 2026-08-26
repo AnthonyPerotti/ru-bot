@@ -1,0 +1,49 @@
+name: RU Scheduler
+
+on:
+  # Run daily to schedule the next day's lunch (22h BRT = 01h UTC next day)
+  schedule:
+    - cron: "0 1 * * 2-6"   # Tue-Sat UTC 01:00 = Mon-Fri BRT ~22:00 (lunch next day)
+    - cron: "0 16 * * 1-5"  # Mon-Fri UTC 16:00 = BRT 13:00 (coffee next day)
+    - cron: "30 14 * * 1-5" # Mon-Fri UTC 14:30 = BRT 11:30 (dinner same day)
+
+  # Allow manual execution from the Actions tab (useful for testing)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (show config without scheduling)"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  schedule-meals:
+    name: Schedule RU meals
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Show config (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "=== Current config.json ==="
+          cat config.json
+          echo "=== Dry run complete. No meals were scheduled. ==="
+
+      - name: Run scheduler
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          UFSM_USERNAME: ${{ secrets.UFSM_USERNAME }}
+          UFSM_PASSWORD: ${{ secrets.UFSM_PASSWORD }}
+        run: python scheduler.py

@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RU Bot — Agendador UFSM</title>
+  <meta name="description" content="Interface web para configurar e automatizar agendamentos no Restaurante Universitário da UFSM via GitHub Actions." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* =========================================================
+       Design tokens
+    ========================================================= */
+    :root {
+      --bg-base:      #0d1117;
+      --bg-surface:   #161b22;
+      --bg-card:      #1c2128;
+      --bg-elevated:  #21262d;
+      --border:       #30363d;
+      --border-light: #3d444d;
+
+      --text-primary:   #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted:     #484f58;
+
+      --accent:         #2563eb;
+      --accent-hover:   #3b82f6;
+      --accent-glow:    rgba(37, 99, 235, 0.25);
+
+      --green:          #3fb950;
+      --green-bg:       rgba(63, 185, 80, 0.12);
+      --yellow:         #d29922;
+      --yellow-bg:      rgba(210, 153, 34, 0.12);
+      --red:            #f85149;
+      --red-bg:         rgba(248, 81, 73, 0.12);
+      --purple:         #8b5cf6;
+      --purple-bg:      rgba(139, 92, 246, 0.12);
+
+      --radius-sm:  6px;
+      --radius-md:  10px;
+      --radius-lg:  16px;
+      --radius-xl:  24px;
+
+      --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+      --shadow-md:  0 4px 16px rgba(0,0,0,0.5);
+      --shadow-lg:  0 8px 32px rgba(0,0,0,0.6);
+
+      --transition: 160ms ease;
+    }
+
+    /* =========================================================
+       Reset & Base
+    ========================================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    a { color: var(--accent-hover); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    button {
+      cursor: pointer;
+      font-family: inherit;
+      border: none;
+      transition: var(--transition);
+    }
+
+    input, select {
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    /* =========================================================
+       Layout
+    ========================================================= */
+    .app-wrapper {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 20px 80px;
+    }
+
+    /* =========================================================
+       Header
+    ========================================================= */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0 28px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 32px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .header-title h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .header-title p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 1px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* =========================================================
+       Buttons
+    ========================================================= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 0 12px var(--accent-glow); }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .btn-secondary {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-card); border-color: var(--border-light); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      padding: 6px 10px;
+    }
+    .btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+    .btn-danger {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid rgba(248,81,73,0.3);
+    }
+    .btn-danger:hover { background: rgba(248,81,73,0.2); }
+
+    /* =========================================================
+       Cards
+    ========================================================= */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    /* =========================================================
+       Setup banner (GitHub credentials)
+    ========================================================= */
+    #setup-banner {
+      background: linear-gradient(135deg, rgba(37,99,235,0.15), rgba(139,92,246,0.1));
+      border: 1px solid rgba(37,99,235,0.4);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    #setup-banner h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    #setup-banner p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      line-height: 1.7;
+    }
+
+    .setup-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    @media (max-width: 640px) {
+      .setup-fields { grid-template-columns: 1fr; }
+    }
+
+    .field-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .field-group input {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      color: var(--text-primary);
+    }
+    .field-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .field-group input::placeholder { color: var(--text-muted); }
+
+    /* =========================================================
+       Status bar
+    ========================================================= */
+    .status-bar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .status-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.green  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.yellow { background: var(--yellow); }
+    .status-dot.red    { background: var(--red); }
+    .status-dot.grey   { background: var(--text-muted); }
+    .status-dot.pulse  { animation: pulse 2s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* =========================================================
+       Deadline panel
+    ========================================================= */
+    .deadline-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 600px) {
+      .deadline-grid { grid-template-columns: 1fr; }
+    }
+
+    .deadline-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+
+    .deadline-meal {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    .deadline-time {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .deadline-status {
+      font-size: 11px;
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    .ok     { color: var(--green); }
+    .warn   { color: var(--yellow); }
+    .closed { color: var(--red); }
+
+    /* =========================================================
+       Schedule grid
+    ========================================================= */
+    .week-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 700px) {
+      .week-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    @media (max-width: 420px) {
+      .week-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .day-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .day-card.today {
+      border-color: rgba(37,99,235,0.5);
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.2), inset 0 0 20px rgba(37,99,235,0.05);
+    }
+
+    .day-card.active {
+      background: var(--bg-card);
+      border-color: var(--accent);
+    }
+
+    .day-card.inactive {
+      opacity: 0.5;
+    }
+
+    .day-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .today-badge {
+      background: var(--accent);
+      color: #fff;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    /* Meal toggles */
+    .meal-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 5px 0;
+      cursor: pointer;
+    }
+
+    .meal-toggle input[type="checkbox"] {
+      display: none;
+    }
+
+    .toggle-pill {
+      width: 28px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      position: relative;
+      flex-shrink: 0;
+      transition: var(--transition);
+    }
+
+    .toggle-pill::after {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: var(--transition);
+    }
+
+    .meal-toggle input:checked + .toggle-pill {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .meal-toggle input:checked + .toggle-pill::after {
+      background: #fff;
+      left: 14px;
+    }
+
+    .meal-toggle-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+
+    .meal-toggle input:checked ~ .meal-toggle-label {
+      color: var(--text-primary);
+    }
+
+    /* RU selector */
+    .ru-selector {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    .ru-btn {
+      flex: 1;
+      padding: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .ru-btn.selected {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* Vegetarian */
+    .veg-toggle {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .veg-label {
+      font-size: 10px;
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    /* =========================================================
+       Enable toggle for each day
+    ========================================================= */
+    .day-enable-switch {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .switch-track {
+      width: 32px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+
+    .switch-track::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: var(--transition);
+    }
+
+    .switch-track.on {
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .switch-track.on::after {
+      background: #fff;
+      left: 17px;
+    }
+
+    .switch-text {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .switch-track.on + .switch-text {
+      color: var(--green);
+    }
+
+    /* =========================================================
+       Actions bar
+    ========================================================= */
+    .actions-bar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .actions-bar-left {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    /* =========================================================
+       Toast notification
+    ========================================================= */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      font-size: 13px;
+      max-width: 320px;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideUp 0.25s ease;
+      pointer-events: all;
+    }
+
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error   { border-left: 3px solid var(--red); }
+    .toast.info    { border-left: 3px solid var(--accent); }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* =========================================================
+       Config preview drawer
+    ========================================================= */
+    .config-preview {
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: pre;
+      overflow-x: auto;
+      line-height: 1.6;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    /* =========================================================
+       Info callout
+    ========================================================= */
+    .callout {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .callout-info    { background: rgba(37,99,235,0.1);  border: 1px solid rgba(37,99,235,0.3); }
+    .callout-warning { background: var(--yellow-bg);      border: 1px solid rgba(210,153,34,0.3); }
+    .callout-success { background: var(--green-bg);       border: 1px solid rgba(63,185,80,0.3); }
+
+    .callout-icon { flex-shrink: 0; font-size: 15px; }
+
+    /* =========================================================
+       Spinner
+    ========================================================= */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* =========================================================
+       Section label
+    ========================================================= */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    /* =========================================================
+       GitHub link badge
+    ========================================================= */
+    .gh-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+
+    .gh-badge:hover {
+      border-color: var(--border-light);
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<div class="app-wrapper">
+
+  <!-- ===== Header ===== -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">🍽️</div>
+      <div class="header-title">
+        <h1>RU Bot</h1>
+        <p>Agendador automático — Restaurante Universitário UFSM</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a id="gh-actions-link" href="#" target="_blank" class="gh-badge" title="Ver execuções no GitHub Actions">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Actions
+      </a>
+      <button id="btn-settings" class="btn btn-ghost" title="Configurar integração GitHub" onclick="toggleSetup()">
+        ⚙️ Config
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== Setup Banner ===== -->
+  <div id="setup-banner" style="display:none;">
+    <h2>Integração com GitHub</h2>
+    <p>
+      Para salvar sua configuração diretamente no repositório, informe um
+      <a href="https://github.com/settings/tokens/new?description=ru-bot&scopes=repo" target="_blank">Personal Access Token</a>
+      (escopo <code>repo</code>), o nome do seu usuário GitHub e o repositório.
+      Essas informações ficam apenas no <code>localStorage</code> do seu navegador.
+    </p>
+    <div class="setup-fields">
+      <div class="field-group">
+        <label>GitHub Token (PAT)</label>
+        <input type="password" id="input-pat" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" />
+      </div>
+      <div class="field-group">
+        <label>Usuário / Organização</label>
+        <input type="text" id="input-owner" placeholder="seu-usuario" />
+      </div>
+      <div class="field-group">
+        <label>Repositório</label>
+        <input type="text" id="input-repo" placeholder="ru-bot" />
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="saveGitHubSettings()">Salvar integração</button>
+      <button class="btn btn-danger" onclick="clearGitHubSettings()">Limpar credenciais</button>
+      <button class="btn btn-ghost" onclick="toggleSetup()">Fechar</button>
+    </div>
+  </div>
+
+  <!-- ===== Status Bar ===== -->
+  <div class="status-bar" id="status-bar">
+    <div class="status-chip">
+      <div class="status-dot grey" id="dot-gh"></div>
+      <span id="label-gh">GitHub não configurado</span>
+    </div>
+    <div class="status-chip">
+      <div class="status-dot pulse green" id="dot-schedule"></div>
+      <span id="label-schedule">Carregando agenda...</span>
+    </div>
+    <div class="status-chip" id="chip-next">
+      <div class="status-dot green"></div>
+      <span id="label-next">—</span>
+    </div>
+  </div>
+
+  <!-- ===== Deadlines ===== -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">⏰ Prazos de agendamento — hoje</div>
+        <div class="card-subtitle" id="today-date-label">—</div>
+      </div>
+    </div>
+    <div class="deadline-grid">
+      <div class="deadline-item">
+        <div class="deadline-meal">☕ Café da manhã</div>
+        <div class="deadline-time">Até 13h do dia anterior</div>
+        <div class="deadline-status" id="dl-coffee">—</div>
+      </div>
+      <div class="deadline-item">
+        <div class="deadline-meal">🍽 Almoço</div>
+        <div class="deadline-time">Até 22h do dia anterior</div>
+        <div class="deadline-status" id="dl-lunch">—</div>
+      </div>
+      <div class="deadline-item">
+        <div class="deadline-meal">🌙 Jantar</div>
+        <div class="deadline-time">Até 11h30 do mesmo dia</div>
+        <div class="deadline-status" id="dl-dinner">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Weekly Schedule ===== -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">📅 Configuração semanal</div>
+        <div class="card-subtitle">Defina as refeições e o campus para cada dia da semana</div>
+      </div>
+    </div>
+
+    <div class="week-grid" id="week-grid">
+      <!-- Filled by JS -->
+    </div>
+
+    <!-- Config preview -->
+    <div style="margin-top: 20px;">
+      <div class="section-label">Preview do config.json gerado</div>
+      <div class="config-preview" id="config-preview">{ }</div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions-bar">
+      <div class="actions-bar-left">
+        <div id="save-status" style="font-size:13px; color: var(--text-secondary);"></div>
+      </div>
+      <button class="btn btn-secondary" onclick="downloadConfig()">
+        ⬇️ Baixar config.json
+      </button>
+      <button class="btn btn-primary" id="btn-commit" onclick="commitConfig()">
+        🚀 Commitar no GitHub
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== How to use ===== -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">📖 Como configurar</div>
+    </div>
+    <ol style="padding-left: 18px; display:flex; flex-direction:column; gap:10px; font-size:13px; color: var(--text-secondary);">
+      <li>Faça fork do repositório <a href="https://github.com/" target="_blank">ru-bot</a> para a sua conta GitHub.</li>
+      <li>Vá em <strong>Settings → Secrets and Variables → Actions</strong> e adicione:
+        <br><code>UFSM_USERNAME</code> = sua matrícula
+        <br><code>UFSM_PASSWORD</code> = sua senha do portal UFSM
+      </li>
+      <li>Vá em <strong>Settings → Pages</strong> e ative o GitHub Pages (Source: <code>main</code>, pasta raiz).</li>
+      <li>Acesse sua interface pelo link do Pages, configure os agendamentos acima e clique em "Commitar no GitHub".</li>
+      <li>Ative os workflows na aba <strong>Actions</strong> do seu repositório.</li>
+      <li>O agendamento rodará automaticamente todos os dias nos horários corretos.</li>
+    </ol>
+    <div class="callout callout-warning" style="margin-top: 16px;">
+      <div class="callout-icon">⚠️</div>
+      <div>Cancele agendamentos que não for usar. Reservar e não aparecer prejudica outros estudantes e pode gerar bloqueio no sistema da UFSM.</div>
+    </div>
+  </div>
+
+</div><!-- /app-wrapper -->
+
+<script>
+// =========================================================
+// Constants
+// =========================================================
+const DAYS = [
+  { abbr: 'Sun', label: 'Dom' },
+  { abbr: 'Mon', label: 'Seg' },
+  { abbr: 'Tue', label: 'Ter' },
+  { abbr: 'Wed', label: 'Qua' },
+  { abbr: 'Thu', label: 'Qui' },
+  { abbr: 'Fri', label: 'Sex' },
+  { abbr: 'Sat', label: 'Sáb' },
+];
+
+const CONFIG_FILE_PATH = 'config.json';
+
+// =========================================================
+// State
+// =========================================================
+let schedule = {};   // { Mon: { enabled, restaurant, vegetarian, coffee, lunch, dinner }, ... }
+let ghSettings = {}; // { pat, owner, repo }
+
+// =========================================================
+// Init
+// =========================================================
+window.addEventListener('DOMContentLoaded', () => {
+  loadGitHubSettings();
+  loadScheduleFromStorage();
+  buildWeekGrid();
+  renderConfigPreview();
+  updateStatusBar();
+  updateDeadlines();
+  setInterval(updateDeadlines, 60_000);
+});
+
+// =========================================================
+// GitHub Settings
+// =========================================================
+function loadGitHubSettings() {
+  try {
+    const raw = localStorage.getItem('ru-bot-gh');
+    if (raw) ghSettings = JSON.parse(raw);
+  } catch (_) {}
+  applyGitHubSettings();
+}
+
+function applyGitHubSettings() {
+  const { pat, owner, repo } = ghSettings;
+  const configured = !!(pat && owner && repo);
+
+  document.getElementById('dot-gh').className = `status-dot ${configured ? 'green' : 'grey'}`;
+  document.getElementById('label-gh').textContent = configured
+    ? `${owner}/${repo}`
+    : 'GitHub não configurado';
+
+  if (owner && repo) {
+    document.getElementById('gh-actions-link').href =
+      `https://github.com/${owner}/${repo}/actions`;
+  }
+
+  if (document.getElementById('input-pat').value === '') {
+    document.getElementById('input-pat').value = pat ? '••••••••••••••••••' : '';
+    document.getElementById('input-owner').value = owner || '';
+    document.getElementById('input-repo').value = repo || '';
+  }
+}
+
+function saveGitHubSettings() {
+  const patInput = document.getElementById('input-pat').value.trim();
+  const owner = document.getElementById('input-owner').value.trim();
+  const repo = document.getElementById('input-repo').value.trim();
+
+  if (!owner || !repo) {
+    toast('Preencha usuário e repositório.', 'error');
+    return;
+  }
+
+  // Keep old PAT if input is masked
+  const pat = patInput.startsWith('•') ? ghSettings.pat : patInput;
+  ghSettings = { pat, owner, repo };
+  localStorage.setItem('ru-bot-gh', JSON.stringify(ghSettings));
+  applyGitHubSettings();
+  toast('Configuração GitHub salva!', 'success');
+  toggleSetup();
+}
+
+function clearGitHubSettings() {
+  if (!confirm('Apagar credenciais GitHub do localStorage?')) return;
+  ghSettings = {};
+  localStorage.removeItem('ru-bot-gh');
+  document.getElementById('input-pat').value = '';
+  document.getElementById('input-owner').value = '';
+  document.getElementById('input-repo').value = '';
+  applyGitHubSettings();
+  toast('Credenciais removidas.', 'info');
+}
+
+function toggleSetup() {
+  const banner = document.getElementById('setup-banner');
+  const visible = banner.style.display !== 'none';
+  banner.style.display = visible ? 'none' : 'block';
+}
+
+// =========================================================
+// Schedule state
+// =========================================================
+function defaultDay(abbr) {
+  const isWeekend = abbr === 'Sat' || abbr === 'Sun';
+  return {
+    enabled: !isWeekend,
+    restaurant: 1,
+    vegetarian: false,
+    coffee: false,
+    lunch: true,
+    dinner: false,
+  };
+}
+
+function loadScheduleFromStorage() {
+  try {
+    const raw = localStorage.getItem('ru-bot-schedule');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      schedule = parsed;
+      return;
+    }
+  } catch (_) {}
+
+  // Default: weekdays, RU I, lunch only
+  schedule = {};
+  DAYS.forEach(({ abbr }) => {
+    schedule[abbr] = defaultDay(abbr);
+  });
+}
+
+function saveScheduleToStorage() {
+  localStorage.setItem('ru-bot-schedule', JSON.stringify(schedule));
+}
+
+// =========================================================
+// Build the weekly grid
+// =========================================================
+function buildWeekGrid() {
+  const grid = document.getElementById('week-grid');
+  grid.innerHTML = '';
+
+  const todayAbbr = new Date().toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
+
+  DAYS.forEach(({ abbr, label }) => {
+    const day = schedule[abbr] || defaultDay(abbr);
+    const isToday = abbr === todayAbbr;
+
+    const card = document.createElement('div');
+    card.className = `day-card ${day.enabled ? 'active' : 'inactive'} ${isToday ? 'today' : ''}`;
+    card.id = `day-card-${abbr}`;
+
+    card.innerHTML = `
+      <div class="day-label">
+        <span>${label}</span>
+        ${isToday ? '<span class="today-badge">hoje</span>' : ''}
+      </div>
+
+      <!-- Enable switch -->
+      <div class="day-enable-switch">
+        <div class="switch-track ${day.enabled ? 'on' : ''}" id="switch-${abbr}"
+             onclick="toggleDayEnabled('${abbr}')"></div>
+        <span class="switch-text" id="switch-text-${abbr}">${day.enabled ? 'Ativo' : 'Off'}</span>
+      </div>
+
+      <!-- RU selector -->
+      <div class="ru-selector">
+        <div class="ru-btn ${day.restaurant === 1 ? 'selected' : ''}"
+             id="ru1-${abbr}" onclick="setRestaurant('${abbr}', 1)">RU I</div>
+        <div class="ru-btn ${day.restaurant === 2 ? 'selected' : ''}"
+             id="ru2-${abbr}" onclick="setRestaurant('${abbr}', 2)">RU II</div>
+      </div>
+
+      <!-- Meal toggles -->
+      <label class="meal-toggle">
+        <input type="checkbox" id="coffee-${abbr}" ${day.coffee ? 'checked' : ''}
+               onchange="setMeal('${abbr}', 'coffee', this.checked)" />
+        <div class="toggle-pill"></div>
+        <span class="meal-toggle-label">☕ Café</span>
+      </label>
+      <label class="meal-toggle">
+        <input type="checkbox" id="lunch-${abbr}" ${day.lunch ? 'checked' : ''}
+               onchange="setMeal('${abbr}', 'lunch', this.checked)" />
+        <div class="toggle-pill"></div>
+        <span class="meal-toggle-label">🍽 Almoço</span>
+      </label>
+      <label class="meal-toggle">
+        <input type="checkbox" id="dinner-${abbr}" ${day.dinner ? 'checked' : ''}
+               onchange="setMeal('${abbr}', 'dinner', this.checked)" />
+        <div class="toggle-pill"></div>
+        <span class="meal-toggle-label">🌙 Jantar</span>
+      </label>
+
+      <!-- Vegetarian toggle -->
+      <div class="veg-toggle">
+        <label class="meal-toggle">
+          <input type="checkbox" id="veg-${abbr}" ${day.vegetarian ? 'checked' : ''}
+                 onchange="setMeal('${abbr}', 'vegetarian', this.checked)" />
+          <div class="toggle-pill"></div>
+          <span class="veg-label meal-toggle-label">🌿 Vegano</span>
+        </label>
+      </div>
+    `;
+
+    grid.appendChild(card);
+  });
+}
+
+// =========================================================
+// Schedule mutations
+// =========================================================
+function toggleDayEnabled(abbr) {
+  schedule[abbr].enabled = !schedule[abbr].enabled;
+  const card = document.getElementById(`day-card-${abbr}`);
+  const sw = document.getElementById(`switch-${abbr}`);
+  const st = document.getElementById(`switch-text-${abbr}`);
+  const enabled = schedule[abbr].enabled;
+
+  card.classList.toggle('active', enabled);
+  card.classList.toggle('inactive', !enabled);
+  sw.classList.toggle('on', enabled);
+  st.textContent = enabled ? 'Ativo' : 'Off';
+
+  onScheduleChange();
+}
+
+function setRestaurant(abbr, ru) {
+  schedule[abbr].restaurant = ru;
+  document.getElementById(`ru1-${abbr}`).classList.toggle('selected', ru === 1);
+  document.getElementById(`ru2-${abbr}`).classList.toggle('selected', ru === 2);
+  onScheduleChange();
+}
+
+function setMeal(abbr, meal, value) {
+  schedule[abbr][meal] = value;
+  onScheduleChange();
+}
+
+function onScheduleChange() {
+  saveScheduleToStorage();
+  renderConfigPreview();
+  updateStatusBar();
+  document.getElementById('save-status').textContent = 'Configuração alterada — lembre de commitar.';
+}
+
+// =========================================================
+// Config JSON generation
+// =========================================================
+function buildConfigObject() {
+  const schedules = [];
+  DAYS.forEach(({ abbr }) => {
+    const day = schedule[abbr];
+    if (!day || !day.enabled) return;
+    schedules.push({
+      weekday: abbr,
+      restaurant: day.restaurant,
+      vegetarian: day.vegetarian,
+      coffee: day.coffee,
+      lunch: day.lunch,
+      dinner: day.dinner,
+    });
+  });
+  return { schedules };
+}
+
+function renderConfigPreview() {
+  const obj = buildConfigObject();
+  document.getElementById('config-preview').textContent = JSON.stringify(obj, null, 2);
+}
+
+// =========================================================
+// Download config
+// =========================================================
+function downloadConfig() {
+  const obj = buildConfigObject();
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'config.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('config.json baixado!', 'success');
+}
+
+// =========================================================
+// Commit to GitHub via API
+// =========================================================
+async function commitConfig() {
+  const { pat, owner, repo } = ghSettings;
+  if (!pat || !owner || !repo) {
+    toast('Configure a integração GitHub primeiro (⚙️ Config).', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btn-commit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Commitando...';
+
+  try {
+    const content = JSON.stringify(buildConfigObject(), null, 2);
+    const encoded = btoa(unescape(encodeURIComponent(content)));
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${CONFIG_FILE_PATH}`;
+
+    // Get current SHA (needed for updates)
+    let sha = null;
+    const getRes = await fetch(apiUrl, {
+      headers: {
+        Authorization: `token ${pat}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (getRes.ok) {
+      const data = await getRes.json();
+      sha = data.sha;
+    } else if (getRes.status !== 404) {
+      throw new Error(`GitHub API error: ${getRes.status} ${getRes.statusText}`);
+    }
+
+    // Commit
+    const putBody = {
+      message: `chore: update meal schedule via RU Bot UI [${new Date().toISOString().slice(0, 10)}]`,
+      content: encoded,
+      ...(sha && { sha }),
+    };
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${pat}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(putBody),
+    });
+
+    if (!putRes.ok) {
+      const errData = await putRes.json().catch(() => ({}));
+      throw new Error(errData.message || `${putRes.status} ${putRes.statusText}`);
+    }
+
+    const saveStatus = document.getElementById('save-status');
+    saveStatus.textContent = `Commitado com sucesso em ${new Date().toLocaleTimeString('pt-BR')}`;
+    saveStatus.style.color = 'var(--green)';
+    toast('config.json commitado no GitHub!', 'success');
+  } catch (err) {
+    console.error(err);
+    toast(`Erro ao commitar: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Commitar no GitHub';
+  }
+}
+
+// =========================================================
+// Status bar
+// =========================================================
+function updateStatusBar() {
+  const activeDays = DAYS.filter(({ abbr }) => schedule[abbr]?.enabled).length;
+  document.getElementById('label-schedule').textContent =
+    `${activeDays} dia${activeDays !== 1 ? 's' : ''} configurado${activeDays !== 1 ? 's' : ''}`;
+
+  // Next scheduled meal
+  const now = new Date();
+  const todayIdx = now.getDay(); // 0=Sun
+  let found = null;
+  for (let i = 1; i <= 7; i++) {
+    const idx = (todayIdx + i) % 7;
+    const abbr = DAYS[idx].abbr;
+    const label = DAYS[idx].label;
+    const day = schedule[abbr];
+    if (day?.enabled && (day.coffee || day.lunch || day.dinner)) {
+      const meals = [];
+      if (day.coffee) meals.push('café');
+      if (day.lunch) meals.push('almoço');
+      if (day.dinner) meals.push('jantar');
+      found = `Próximo: ${label} (${meals.join(', ')})`;
+      break;
+    }
+  }
+  document.getElementById('label-next').textContent = found || 'Nenhum agendamento';
+}
+
+// =========================================================
+// Deadlines
+// =========================================================
+function updateDeadlines() {
+  const now = new Date();
+  const brt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+
+  const todayLabel = brt.toLocaleDateString('pt-BR', {
+    weekday: 'long', day: 'numeric', month: 'long'
+  });
+  document.getElementById('today-date-label').textContent =
+    `${todayLabel} — ${brt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (BRT)`;
+
+  // Coffee: deadline is 13h yesterday = 13h the day BEFORE tomorrow
+  // We check: can we still schedule tomorrow's coffee? (13h today must not have passed)
+  const coffeeDeadline = new Date(brt);
+  coffeeDeadline.setHours(13, 0, 0, 0);
+
+  const lunchDeadline = new Date(brt);
+  lunchDeadline.setHours(22, 0, 0, 0);
+
+  const dinnerDeadline = new Date(brt);
+  dinnerDeadline.setHours(11, 30, 0, 0);
+
+  renderDeadline('dl-coffee', brt, coffeeDeadline, 'amanhã');
+  renderDeadline('dl-lunch', brt, lunchDeadline, 'amanhã');
+  renderDeadline('dl-dinner', brt, dinnerDeadline, 'hoje');
+}
+
+function renderDeadline(elemId, now, deadline, forDay) {
+  const el = document.getElementById(elemId);
+  const diff = deadline - now; // ms
+
+  if (diff <= 0) {
+    el.className = 'deadline-status closed';
+    el.textContent = `Encerrado para ${forDay}`;
+    return;
+  }
+
+  const hrs = Math.floor(diff / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+
+  if (hrs < 1) {
+    el.className = 'deadline-status warn';
+    el.textContent = `${mins}min restantes`;
+  } else {
+    el.className = 'deadline-status ok';
+    el.textContent = `${hrs}h${mins > 0 ? ` ${mins}min` : ''} restantes`;
+  }
+}
+
+// =========================================================
+// Toast
+// =========================================================
+function toast(message, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  const container = document.getElementById('toast-container');
+
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icons[type]}</span><span>${message}</span>`;
+  container.appendChild(el);
+
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(8px)';
+    el.style.transition = '0.25s ease';
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+</script>
+
+</body>
+</html>

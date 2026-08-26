@@ -1,0 +1,212 @@
+import sys
+import json
+import uuid
+import logging
+import requests
+from datetime import datetime, timedelta
+import pytz
+
+# --- Configuration ---
+
+BASE_URL = "https://portal.ufsm.br/mobile/webservice"
+TIMEZONE = pytz.timezone("America/Sao_Paulo")
+
+# Device info obtained via reverse engineering of the UFSMDigital app.
+# These values simulate a mobile client. The device-id is intentionally
+# randomized per installation to avoid collisions with other users.
+APP_NAME = "UFSMDigital"
+DEVICE_INFO = "Android generic android:11"
+
+# Restaurant ID mapping (from portal source)
+RESTAURANT_IDS = {
+    1: 1,   # RU Campus I
+    2: 41,  # RU Campus II
+}
+
+# Meal type codes used by the API
+MEAL_TYPES = {
+    "coffee": "CAFE",
+    "lunch": "ALMOCO",
+    "dinner": "JANTAR",
+}
+
+# Deadline offsets (hours before the meal window opens)
+# Used to determine which meals are still schedulable today
+MEAL_DEADLINES = {
+    # Coffee: must schedule by 13h the day before
+    "coffee": {"offset_days": 1, "cutoff_hour": 13},
+    # Lunch: must schedule by 22h the day before
+    "lunch": {"offset_days": 1, "cutoff_hour": 22},
+    # Dinner: must schedule by 11h30 of the same day
+    "dinner": {"offset_days": 0, "cutoff_hour": 11, "cutoff_minute": 30},
+}
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+def load_config(path: str = "config.json") -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_or_generate_device_id(config: dict) -> str:
+    """Returns existing device-id from config or generates a new one."""
+    device_id = config.get("device_id")
+    if not device_id:
+        device_id = str(uuid.uuid4())
+        logger.warning("No device_id found in config. Generated: %s", device_id)
+    return device_id
+
+
+def login(username: str, password: str, device_id: str) -> str:
+    """Authenticates against the UFSM mobile API and returns a session token."""
+    logger.info("Authenticating as %s...", username)
+
+    response = requests.post(
+        f"{BASE_URL}/generateToken",
+        json={
+            "appName": APP_NAME,
+            "deviceId": device_id,
+            "deviceInfo": DEVICE_INFO,
+            "messageToken": "",
+            "login": username,
+            "senha": password,
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    if data.get("error"):
+        raise RuntimeError(f"Login failed: {data.get('mensagem', 'unknown error')}")
+
+    token = data.get("token")
+    if not token:
+        raise RuntimeError("No token returned from API despite no error flag.")
+
+    logger.info("Authentication successful.")
+    return token
+
+
+def get_scheduled_meals(token: str) -> list:
+    """Fetches the list of already scheduled meals to avoid duplicates."""
+    response = requests.get(
+        f"{BASE_URL}/ru/agendamentos",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data if isinstance(data, list) else []
+
+
+def schedule_meal(token: str, target_date: datetime, schedule: dict, device_id: str) -> None:
+    """Schedules meals for a given date based on the schedule config entry."""
+    restaurant_id = RESTAURANT_IDS.get(schedule["restaurant"], schedule["restaurant"])
+    meal_types = []
+
+    for key, code in MEAL_TYPES.items():
+        if schedule.get(key):
+            meal_types.append(code)
+
+    if not meal_types:
+        logger.info("No meals configured for %s. Skipping.", target_date.strftime("%a %Y-%m-%d"))
+        return
+
+    date_str = target_date.strftime("%Y-%m-%d")
+    logger.info(
+        "Scheduling meals for %s: %s at RU %s (vegetarian=%s)",
+        date_str,
+        ", ".join(meal_types),
+        schedule["restaurant"],
+        schedule.get("vegetarian", False),
+    )
+
+    payload = {
+        "dataInicio": f"{date_str} 00:00:00",
+        "dataFim": f"{date_str} 23:59:59",
+        "idRestaurante": restaurant_id,
+        "opcaoVegetariana": schedule.get("vegetarian", False),
+        "tiposRefeicoes": meal_types,
+    }
+
+    response = requests.post(
+        f"{BASE_URL}/ru/agendarRefeicao",
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "appName": APP_NAME,
+            "deviceId": device_id,
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    if data.get("error"):
+        raise RuntimeError(
+            f"Scheduling failed for {date_str}: {data.get('mensagem', 'unknown error')}"
+        )
+
+    logger.info("Successfully scheduled meals for %s.", date_str)
+
+
+def find_schedule_for_weekday(schedules: list, weekday_abbr: str) -> dict | None:
+    """Finds the schedule entry matching the given weekday abbreviation (Mon, Tue, etc.)."""
+    for entry in schedules:
+        if entry.get("weekday") == weekday_abbr:
+            return entry
+    return None
+
+
+def run(username: str, password: str, config_path: str = "config.json") -> None:
+    config = load_config(config_path)
+    device_id = get_or_generate_device_id(config)
+    schedules = config.get("schedules", [])
+
+    if not schedules:
+        logger.warning("No schedules defined in config. Nothing to do.")
+        return
+
+    token = login(username, password, device_id)
+
+    # We target the next calendar day by default (run at ~23h BRT)
+    now = datetime.now(TIMEZONE)
+    target_date = now + timedelta(days=1)
+    weekday_abbr = target_date.strftime("%a")  # "Mon", "Tue", etc.
+
+    logger.info(
+        "Current time: %s | Targeting: %s (%s)",
+        now.strftime("%Y-%m-%d %H:%M %Z"),
+        target_date.strftime("%Y-%m-%d"),
+        weekday_abbr,
+    )
+
+    schedule_entry = find_schedule_for_weekday(schedules, weekday_abbr)
+    if not schedule_entry:
+        logger.info("No schedule configured for %s. Skipping.", weekday_abbr)
+        return
+
+    schedule_meal(token, target_date, schedule_entry, device_id)
+
+
+if __name__ == "__main__":
+    import os
+
+    username = os.environ.get("UFSM_USERNAME")
+    password = os.environ.get("UFSM_PASSWORD")
+
+    if not username or not password:
+        logger.error("UFSM_USERNAME and UFSM_PASSWORD environment variables must be set.")
+        sys.exit(1)
+
+    try:
+        run(username, password)
+    except Exception as exc:
+        logger.exception("Scheduler failed: %s", exc)
+        sys.exit(1)
