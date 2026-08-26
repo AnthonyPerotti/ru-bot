@@ -1,27 +1,42 @@
 import sys
 import json
 import uuid
+import socket
 import logging
 import requests
 from datetime import datetime, timedelta
 import pytz
+import urllib3.util.connection as urllib3_conn
+
+# Force IPv4 resolution to prevent [Errno 101] Network unreachable on GitHub Actions runners
+def allowed_gai_family():
+    return socket.AF_INET
+
+urllib3_conn.allowed_gai_family = allowed_gai_family
 
 # --- Configuration ---
 
 BASE_URL = "https://portal.ufsm.br/mobile/webservice"
 TIMEZONE = pytz.timezone("America/Sao_Paulo")
 
-# Device info obtained via reverse engineering of the UFSMDigital app.
-# These values simulate a mobile client. The device-id is intentionally
-# randomized per installation to avoid collisions with other users.
+# Device and client headers simulating official UFSMDigital mobile app
 APP_NAME = "UFSMDigital"
 DEVICE_INFO = "Android generic android:11"
+USER_AGENT = "Dart/3.0 (dart:io)"
+
+HTTP_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json;charset=UTF-8",
+    "Connection": "keep-alive",
+}
 
 # Restaurant ID mapping (from portal source)
 RESTAURANT_IDS = {
     1: 1,   # RU Campus I
     2: 41,  # RU Campus II
 }
+
 
 # Meal type codes used by the API
 MEAL_TYPES = {
@@ -67,6 +82,12 @@ def login(username: str, password: str, device_id: str) -> str:
     """Authenticates against the UFSM mobile API and returns a session token."""
     logger.info("Authenticating as %s...", username)
 
+    headers = {
+        **HTTP_HEADERS,
+        "appName": APP_NAME,
+        "deviceId": device_id,
+    }
+
     response = requests.post(
         f"{BASE_URL}/generateToken",
         json={
@@ -77,6 +98,7 @@ def login(username: str, password: str, device_id: str) -> str:
             "login": username,
             "senha": password,
         },
+        headers=headers,
         timeout=30,
     )
     response.raise_for_status()
@@ -95,9 +117,13 @@ def login(username: str, password: str, device_id: str) -> str:
 
 def get_scheduled_meals(token: str) -> list:
     """Fetches the list of already scheduled meals to avoid duplicates."""
+    headers = {
+        **HTTP_HEADERS,
+        "Authorization": f"Bearer {token}",
+    }
     response = requests.get(
         f"{BASE_URL}/ru/agendamentos",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         timeout=30,
     )
     response.raise_for_status()
@@ -153,14 +179,17 @@ def schedule_meal(token: str, target_date: datetime, schedule: dict, device_id: 
             "tiposRefeicoes": meals,
         }
 
+        headers = {
+            **HTTP_HEADERS,
+            "Authorization": f"Bearer {token}",
+            "appName": APP_NAME,
+            "deviceId": device_id,
+        }
+
         response = requests.post(
             f"{BASE_URL}/ru/agendarRefeicao",
             json=payload,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "appName": APP_NAME,
-                "deviceId": device_id,
-            },
+            headers=headers,
             timeout=30,
         )
         response.raise_for_status()
