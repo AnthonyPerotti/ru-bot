@@ -107,53 +107,71 @@ def get_scheduled_meals(token: str) -> list:
 
 def schedule_meal(token: str, target_date: datetime, schedule: dict, device_id: str) -> None:
     """Schedules meals for a given date based on the schedule config entry."""
-    restaurant_id = RESTAURANT_IDS.get(schedule["restaurant"], schedule["restaurant"])
-    meal_types = []
+    preferred_restaurant = schedule.get("restaurant", 1)
+    is_veg = schedule.get("vegetarian", False)
+    date_str = target_date.strftime("%Y-%m-%d")
 
-    for key, code in MEAL_TYPES.items():
-        if schedule.get(key):
-            meal_types.append(code)
+    # Map requested meals to their respective restaurant.
+    # Note on UFSM RU rules:
+    # RU II (Campus II) only serves Lunch (ALMOCO).
+    # Breakfast (CAFE) and Dinner (JANTAR) are served at RU I (Campus I).
+    # If the user chooses RU II as preferred, Lunch goes to RU II and Breakfast/Dinner go to RU I.
+    restaurant_meal_map = {}
 
-    if not meal_types:
+    if schedule.get("coffee"):
+        # Breakfast is always at RU I
+        restaurant_meal_map.setdefault(RESTAURANT_IDS[1], []).append(MEAL_TYPES["coffee"])
+
+    if schedule.get("lunch"):
+        # Lunch goes to user's preferred restaurant (RU I or RU II)
+        target_rest_id = RESTAURANT_IDS.get(preferred_restaurant, preferred_restaurant)
+        restaurant_meal_map.setdefault(target_rest_id, []).append(MEAL_TYPES["lunch"])
+
+    if schedule.get("dinner"):
+        # Dinner is always at RU I
+        restaurant_meal_map.setdefault(RESTAURANT_IDS[1], []).append(MEAL_TYPES["dinner"])
+
+    if not restaurant_meal_map:
         logger.info("No meals configured for %s. Skipping.", target_date.strftime("%a %Y-%m-%d"))
         return
 
-    date_str = target_date.strftime("%Y-%m-%d")
-    logger.info(
-        "Scheduling meals for %s: %s at RU %s (vegetarian=%s)",
-        date_str,
-        ", ".join(meal_types),
-        schedule["restaurant"],
-        schedule.get("vegetarian", False),
-    )
-
-    payload = {
-        "dataInicio": f"{date_str} 00:00:00",
-        "dataFim": f"{date_str} 23:59:59",
-        "idRestaurante": restaurant_id,
-        "opcaoVegetariana": schedule.get("vegetarian", False),
-        "tiposRefeicoes": meal_types,
-    }
-
-    response = requests.post(
-        f"{BASE_URL}/ru/agendarRefeicao",
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "appName": APP_NAME,
-            "deviceId": device_id,
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-
-    data = response.json()
-    if data.get("error"):
-        raise RuntimeError(
-            f"Scheduling failed for {date_str}: {data.get('mensagem', 'unknown error')}"
+    for rest_id, meals in restaurant_meal_map.items():
+        rest_name = "RU II (Campus II)" if rest_id == RESTAURANT_IDS[2] else "RU I (Campus I)"
+        logger.info(
+            "Scheduling for %s at %s: %s (vegetarian=%s)",
+            date_str,
+            rest_name,
+            ", ".join(meals),
+            is_veg,
         )
 
-    logger.info("Successfully scheduled meals for %s.", date_str)
+        payload = {
+            "dataInicio": f"{date_str} 00:00:00",
+            "dataFim": f"{date_str} 23:59:59",
+            "idRestaurante": rest_id,
+            "opcaoVegetariana": is_veg,
+            "tiposRefeicoes": meals,
+        }
+
+        response = requests.post(
+            f"{BASE_URL}/ru/agendarRefeicao",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "appName": APP_NAME,
+                "deviceId": device_id,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        if data.get("error"):
+            raise RuntimeError(
+                f"Scheduling failed for {date_str} at {rest_name}: {data.get('mensagem', 'unknown error')}"
+            )
+
+        logger.info("Successfully scheduled %s at %s for %s.", ", ".join(meals), rest_name, date_str)
 
 
 def find_schedule_for_weekday(schedules: list, weekday_abbr: str) -> dict | None:
