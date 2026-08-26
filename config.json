@@ -2,7 +2,7 @@
   "schedules": [
     {
       "weekday": "Mon",
-      "restaurant": 1,
+      "restaurant": 2,
       "vegetarian": false,
       "coffee": false,
       "lunch": true,
@@ -10,7 +10,7 @@
     },
     {
       "weekday": "Tue",
-      "restaurant": 1,
+      "restaurant": 2,
       "vegetarian": false,
       "coffee": false,
       "lunch": true,
@@ -18,7 +18,7 @@
     },
     {
       "weekday": "Wed",
-      "restaurant": 1,
+      "restaurant": 2,
       "vegetarian": false,
       "coffee": false,
       "lunch": true,
@@ -26,7 +26,7 @@
     },
     {
       "weekday": "Thu",
-      "restaurant": 1,
+      "restaurant": 2,
       "vegetarian": false,
       "coffee": false,
       "lunch": true,
@@ -34,7 +34,7 @@
     },
     {
       "weekday": "Fri",
-      "restaurant": 1,
+      "restaurant": 2,
       "vegetarian": false,
       "coffee": false,
       "lunch": true,
