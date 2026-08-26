@@ -34,9 +34,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Setup Cloudflare WARP (Network & Firewall bypass)
-        uses: fscarmen/warp-on-actions@v1.3
-
       - name: Show config (dry run)
         if: ${{ github.event.inputs.dry_run == 'true' }}
         run: |
