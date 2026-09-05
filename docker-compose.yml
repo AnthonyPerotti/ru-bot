@@ -1,0 +1,15 @@
+services:
+  ru-bot:
+    build: .
+    container_name: ru-bot
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    environment:
+      - TZ=America/Sao_Paulo
+      # Credenciais podem ser definidas no config.json via interface web
+      # ou passadas como variáveis de ambiente abaixo / via arquivo .env:
+      - UFSM_USERNAME=${UFSM_USERNAME:-}
+      - UFSM_PASSWORD=${UFSM_PASSWORD:-}
+    volumes:
+      - ./config.json:/app/config.json

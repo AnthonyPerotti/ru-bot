@@ -245,8 +245,12 @@
       margin-bottom: 14px;
     }
 
+    .setup-fields-2 {
+      grid-template-columns: 1fr 1fr;
+    }
+
     @media (max-width: 640px) {
-      .setup-fields { grid-template-columns: 1fr; }
+      .setup-fields, .setup-fields-2 { grid-template-columns: 1fr; }
     }
 
     .field-group label {
@@ -731,43 +735,69 @@
       </div>
     </div>
     <div class="header-actions">
-      <a id="gh-actions-link" href="#" target="_blank" class="gh-badge" title="Ver execuções no GitHub Actions">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        Actions
-      </a>
-      <button id="btn-settings" class="btn btn-ghost" title="Configurar integração GitHub" onclick="toggleSetup()">
-        ⚙️ Config
+      <button id="btn-settings" class="btn btn-ghost" title="Configurações e credenciais" onclick="toggleSetup()">
+        ⚙️ Configurações
       </button>
     </div>
   </header>
 
   <!-- ===== Setup Banner ===== -->
   <div id="setup-banner" style="display:none;">
-    <h2>Integração com GitHub</h2>
-    <p>
-      Para salvar sua configuração diretamente no repositório, informe um
-      <a href="https://github.com/settings/tokens/new?description=ru-bot&scopes=repo" target="_blank">Personal Access Token</a>
-      (escopo <code>repo</code>), o nome do seu usuário GitHub e o repositório.
-      Essas informações ficam apenas no <code>localStorage</code> do seu navegador.
-    </p>
-    <div class="setup-fields">
-      <div class="field-group">
-        <label>GitHub Token (PAT)</label>
-        <input type="password" id="input-pat" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" />
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+      <h2 style="margin:0;">⚙️ Configurações do Sistema</h2>
+      <button class="btn btn-ghost" style="padding:4px 8px; font-size:12px;" onclick="toggleSetup()">✕ Fechar</button>
+    </div>
+
+    <!-- Abas -->
+    <div style="display:flex; gap:8px; margin-bottom:16px;">
+      <button id="tab-btn-ufsm" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="switchConfigTab('ufsm')">🎓 Credenciais UFSM</button>
+      <button id="tab-btn-gh" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchConfigTab('gh')">🐙 Integração GitHub (Opcional)</button>
+    </div>
+
+    <!-- Aba UFSM -->
+    <div id="tab-content-ufsm">
+      <p>
+        Informe sua matrícula e senha do Portal UFSM. Elas serão salvas localmente no <code>config.json</code> para que o bot possa efetuar o agendamento das suas refeições.
+      </p>
+      <div class="setup-fields setup-fields-2">
+        <div class="field-group">
+          <label>Matrícula UFSM (Login)</label>
+          <input type="text" id="input-ufsm-user" placeholder="Ex: 202112345" autocomplete="username" />
+        </div>
+        <div class="field-group">
+          <label>Senha do Portal</label>
+          <input type="password" id="input-ufsm-pass" placeholder="Sua senha do portal" autocomplete="current-password" />
+        </div>
       </div>
-      <div class="field-group">
-        <label>Usuário / Organização</label>
-        <input type="text" id="input-owner" placeholder="seu-usuario" />
-      </div>
-      <div class="field-group">
-        <label>Repositório</label>
-        <input type="text" id="input-repo" placeholder="ru-bot" />
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+        <button class="btn btn-primary" onclick="saveUfsmCredentials()">Salvar Credenciais UFSM</button>
+        <button class="btn btn-danger" onclick="clearUfsmCredentials()">Remover Credenciais</button>
       </div>
     </div>
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="saveGitHubSettings()">Salvar integração</button>
-      <button class="btn btn-danger" onclick="clearGitHubSettings()">Limpar credenciais</button>
-      <button class="btn btn-ghost" onclick="toggleSetup()">Fechar</button>
+
+    <!-- Aba GitHub -->
+    <div id="tab-content-gh" style="display:none;">
+      <p>
+        Caso queira sincronizar as configurações com o repositório remoto via API do GitHub, informe seu Personal Access Token (escopo <code>repo</code>), usuário e repositório.
+      </p>
+      <div class="setup-fields">
+        <div class="field-group">
+          <label>GitHub Token (PAT)</label>
+          <input type="password" id="input-pat" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" />
+        </div>
+        <div class="field-group">
+          <label>Usuário / Organização</label>
+          <input type="text" id="input-owner" placeholder="seu-usuario" />
+        </div>
+        <div class="field-group">
+          <label>Repositório</label>
+          <input type="text" id="input-repo" placeholder="ru-bot" />
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+        <button class="btn btn-primary" onclick="saveGitHubSettings()">Salvar Integração GitHub</button>
+        <button class="btn btn-danger" onclick="clearGitHubSettings()">Limpar Credenciais GitHub</button>
+      </div>
     </div>
   </div>
 
@@ -841,8 +871,11 @@
       <button class="btn btn-secondary" onclick="downloadConfig()">
         ⬇️ Baixar config.json
       </button>
-      <button class="btn btn-primary" id="btn-commit" onclick="commitConfig()">
-        🚀 Commitar no GitHub
+      <button class="btn btn-primary" id="btn-save-local" onclick="saveConfigLocal()">
+        💾 Salvar no Computador / Servidor
+      </button>
+      <button class="btn btn-secondary" id="btn-commit" onclick="commitConfig()" title="Opcional: salva no seu repositório GitHub via API">
+        🐙 Commitar no GitHub
       </button>
     </div>
   </div>
@@ -850,18 +883,17 @@
   <!-- ===== How to use ===== -->
   <div class="card">
     <div class="card-header">
-      <div class="card-title">📖 Como configurar</div>
+      <div class="card-title">📖 Como utilizar</div>
     </div>
     <ol style="padding-left: 18px; display:flex; flex-direction:column; gap:10px; font-size:13px; color: var(--text-secondary);">
-      <li>Faça fork do repositório <a href="https://github.com/" target="_blank">ru-bot</a> para a sua conta GitHub.</li>
-      <li>Vá em <strong>Settings → Secrets and Variables → Actions</strong> e adicione:
-        <br><code>UFSM_USERNAME</code> = sua matrícula
-        <br><code>UFSM_PASSWORD</code> = sua senha do portal UFSM
+      <li>Clique em <strong>⚙️ Configurações</strong> no topo e preencha suas credenciais do Portal UFSM (matrícula e senha).</li>
+      <li>Defina os dias da semana, refeições e campus de sua preferência no painel acima.</li>
+      <li>Clique em <strong>💾 Salvar no Computador / Servidor</strong> para salvar as preferências diretamente no seu arquivo <code>config.json</code> (ou baixe o arquivo se estiver rodando via arquivo HTML estático).</li>
+      <li>Inicie o serviço do robô:
+        <br>• <strong>Sem Homelab / Local</strong>: execute o arquivo <code>iniciar.bat</code> (Windows) ou <code>python scheduler.py</code> no terminal.
+        <br>• <strong>Com Docker / Homelab / ZimaOS</strong>: execute <code>docker compose up -d</code>.
       </li>
-      <li>Vá em <strong>Settings → Pages</strong> e ative o GitHub Pages (Source: <code>main</code>, pasta raiz).</li>
-      <li>Acesse sua interface pelo link do Pages, configure os agendamentos acima e clique em "Commitar no GitHub".</li>
-      <li>Ative os workflows na aba <strong>Actions</strong> do seu repositório.</li>
-      <li>O agendamento rodará automaticamente todos os dias nos horários corretos.</li>
+      <li>O robô permanecerá rodando e fará as reservas automaticamente nos horários limites de cada refeição (11:30 para jantar, 13:00 para café e 22:00 para almoço).</li>
     </ol>
     <div class="callout callout-warning" style="margin-top: 16px;">
       <div class="callout-icon">⚠️</div>
@@ -893,18 +925,80 @@ const CONFIG_FILE_PATH = 'config.json';
 let schedule = {};   // { Mon: { enabled, restaurant, vegetarian, coffee, lunch, dinner }, ... }
 let ghSettings = {}; // { pat, owner, repo }
 
+let ufsmCredentials = { username: '', password: '' };
+
 // =========================================================
 // Init
 // =========================================================
 window.addEventListener('DOMContentLoaded', () => {
+  loadUfsmCredentials();
   loadGitHubSettings();
   loadScheduleFromStorage();
+  tryLoadConfigFromLocalServer();
   buildWeekGrid();
   renderConfigPreview();
   updateStatusBar();
   updateDeadlines();
   setInterval(updateDeadlines, 60_000);
 });
+
+// =========================================================
+// Tab & Setup Navigation
+// =========================================================
+function switchConfigTab(tab) {
+  const isUfsm = tab === 'ufsm';
+  document.getElementById('tab-btn-ufsm').className = `btn ${isUfsm ? 'btn-primary' : 'btn-secondary'}`;
+  document.getElementById('tab-btn-gh').className = `btn ${isUfsm ? 'btn-secondary' : 'btn-primary'}`;
+  document.getElementById('tab-content-ufsm').style.display = isUfsm ? 'block' : 'none';
+  document.getElementById('tab-content-gh').style.display = isUfsm ? 'none' : 'block';
+}
+
+// =========================================================
+// UFSM Credentials
+// =========================================================
+function loadUfsmCredentials() {
+  try {
+    const raw = localStorage.getItem('ru-bot-ufsm');
+    if (raw) ufsmCredentials = JSON.parse(raw);
+  } catch (_) {}
+  applyUfsmCredentials();
+}
+
+function applyUfsmCredentials() {
+  const { username, password } = ufsmCredentials;
+  const userInput = document.getElementById('input-ufsm-user');
+  const passInput = document.getElementById('input-ufsm-pass');
+  if (userInput && username) userInput.value = username;
+  if (passInput && password) passInput.value = password;
+}
+
+function saveUfsmCredentials() {
+  const username = document.getElementById('input-ufsm-user').value.trim();
+  const password = document.getElementById('input-ufsm-pass').value;
+
+  if (!username || !password) {
+    toast('Preencha a matrícula e a senha da UFSM.', 'error');
+    return;
+  }
+
+  ufsmCredentials = { username, password };
+  localStorage.setItem('ru-bot-ufsm', JSON.stringify(ufsmCredentials));
+  renderConfigPreview();
+  toast('Credenciais UFSM salvas!', 'success');
+
+  // If local server is available, auto sync
+  saveConfigLocal(true);
+}
+
+function clearUfsmCredentials() {
+  if (!confirm('Deseja apagar as credenciais da UFSM salvas?')) return;
+  ufsmCredentials = { username: '', password: '' };
+  localStorage.removeItem('ru-bot-ufsm');
+  document.getElementById('input-ufsm-user').value = '';
+  document.getElementById('input-ufsm-pass').value = '';
+  renderConfigPreview();
+  toast('Credenciais da UFSM removidas.', 'info');
+}
 
 // =========================================================
 // GitHub Settings
@@ -924,12 +1018,7 @@ function applyGitHubSettings() {
   document.getElementById('dot-gh').className = `status-dot ${configured ? 'green' : 'grey'}`;
   document.getElementById('label-gh').textContent = configured
     ? `${owner}/${repo}`
-    : 'GitHub não configurado';
-
-  if (owner && repo) {
-    document.getElementById('gh-actions-link').href =
-      `https://github.com/${owner}/${repo}/actions`;
-  }
+    : 'Execução Local / Homelab';
 
   if (document.getElementById('input-pat').value === '') {
     document.getElementById('input-pat').value = pat ? '••••••••••••••••••' : '';
@@ -987,6 +1076,42 @@ function defaultDay(abbr) {
     lunch: true,
     dinner: false,
   };
+}
+
+async function tryLoadConfigFromLocalServer() {
+  try {
+    const res = await fetch('config.json?t=' + Date.now());
+    if (res.ok) {
+      const data = await res.json();
+      if (data.credentials) {
+        ufsmCredentials = data.credentials;
+        localStorage.setItem('ru-bot-ufsm', JSON.stringify(ufsmCredentials));
+        applyUfsmCredentials();
+      }
+      if (Array.isArray(data.schedules) && data.schedules.length > 0) {
+        DAYS.forEach(({ abbr }) => {
+          const match = data.schedules.find(s => s.weekday === abbr);
+          if (match) {
+            schedule[abbr] = {
+              enabled: true,
+              restaurant: match.restaurant || 1,
+              vegetarian: !!match.vegetarian,
+              coffee: !!match.coffee,
+              lunch: !!match.lunch,
+              dinner: !!match.dinner,
+            };
+          } else {
+            schedule[abbr] = defaultDay(abbr);
+            schedule[abbr].enabled = false;
+          }
+        });
+        saveScheduleToStorage();
+        buildWeekGrid();
+        renderConfigPreview();
+        updateStatusBar();
+      }
+    }
+  } catch (_) {}
 }
 
 function loadScheduleFromStorage() {
@@ -1137,12 +1262,64 @@ function buildConfigObject() {
       dinner: day.dinner,
     });
   });
-  return { schedules };
+
+  const payload = { schedules };
+
+  // Include credentials if available
+  if (ufsmCredentials.username || ufsmCredentials.password) {
+    payload.credentials = {
+      username: ufsmCredentials.username || '',
+      password: ufsmCredentials.password || '',
+    };
+  }
+
+  return payload;
 }
 
 function renderConfigPreview() {
   const obj = buildConfigObject();
   document.getElementById('config-preview').textContent = JSON.stringify(obj, null, 2);
+}
+
+// =========================================================
+// Save to local server / computer
+// =========================================================
+async function saveConfigLocal(silent = false) {
+  const btn = document.getElementById('btn-save-local');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Salvando...';
+  }
+
+  try {
+    const configData = buildConfigObject();
+    const res = await fetch('/api/save-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(configData),
+    });
+
+    if (res.ok) {
+      const statusEl = document.getElementById('save-status');
+      if (statusEl) {
+        statusEl.textContent = `Salvo no servidor local às ${new Date().toLocaleTimeString('pt-BR')}`;
+        statusEl.style.color = 'var(--green)';
+      }
+      if (!silent) toast('config.json atualizado no servidor com sucesso!', 'success');
+    } else {
+      throw new Error(`Servidor retornou status ${res.status}`);
+    }
+  } catch (err) {
+    if (!silent) {
+      toast('Servidor local não detectado. Baixe o config.json e coloque na pasta do bot.', 'info');
+      downloadConfig();
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Salvar no Computador / Servidor';
+    }
+  }
 }
 
 // =========================================================
