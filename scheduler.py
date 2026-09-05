@@ -55,15 +55,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def resolve_config_path(path: str = "config.json") -> str:
+    env_path = os.environ.get("CONFIG_PATH")
+    if env_path:
+        return env_path
+    if path != "config.json":
+        return path
+    if os.path.exists("data"):
+        return os.path.join("data", "config.json")
+    return "config.json"
+
+
 def load_config(path: str = "config.json") -> dict:
-    if not os.path.exists(path):
+    resolved = resolve_config_path(path)
+    if not os.path.exists(resolved):
+        # Fallback to local config.json if data/config.json is not yet created
+        if os.path.exists("config.json"):
+            with open("config.json", "r", encoding="utf-8") as f:
+                return json.load(f)
         return {}
-    with open(path, "r", encoding="utf-8") as f:
+    with open(resolved, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def save_config(config: dict, path: str = "config.json") -> None:
-    with open(path, "w", encoding="utf-8") as f:
+    resolved = resolve_config_path(path)
+    os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
+    with open(resolved, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
 

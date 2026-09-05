@@ -54,7 +54,7 @@ Para rodar de forma continua em um servidor Homelab, ZimaOS ou maquina com Docke
    ```
 
 4. Na interface, va em "Configuracoes", cadastre as credenciais da UFSM, monte sua grade semanal e salve.
-   O volume mapeado (`./config.json:/app/config.json`) garante que as alteracoes sejam preservadas e aplicadas imediatamente pelo agendador em loop.
+   O volume gerenciado (`ru_bot_data`) garante que as alteracoes sejam preservadas e aplicadas imediatamente pelo agendador em loop.
 
 Tambem e possivel definir as credenciais diretamente via variaveis de ambiente caso prefira, criando um arquivo `.env` baseado em `.env.example`:
 ```env

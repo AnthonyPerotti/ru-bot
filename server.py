@@ -7,9 +7,33 @@ PORT = int(os.environ.get("PORT", 3456))
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 
 
+def get_config_path() -> str:
+    env_path = os.environ.get("CONFIG_PATH")
+    if env_path:
+        return env_path
+    data_dir = os.path.join(DIRECTORY, "data")
+    if os.path.exists(data_dir):
+        return os.path.join(data_dir, "config.json")
+    return os.path.join(DIRECTORY, "config.json")
+
+
 class CustomHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
+
+    def do_GET(self):
+        # Serve config.json directly from active location if requested
+        if self.path.startswith("/config.json"):
+            config_path = get_config_path()
+            if os.path.exists(config_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                with open(config_path, "rb") as f:
+                    self.wfile.write(f.read())
+                return
+        super().do_GET()
 
     def do_POST(self):
         if self.path == "/api/save-config":
@@ -18,7 +42,8 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 body = self.rfile.read(content_length).decode("utf-8")
                 payload = json.loads(body)
 
-                config_path = os.path.join(DIRECTORY, "config.json")
+                config_path = get_config_path()
+                os.makedirs(os.path.dirname(config_path), exist_ok=True)
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(payload, f, indent=2, ensure_ascii=False)
 

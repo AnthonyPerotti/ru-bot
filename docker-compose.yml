@@ -12,4 +12,7 @@ services:
       - UFSM_USERNAME=${UFSM_USERNAME:-}
       - UFSM_PASSWORD=${UFSM_PASSWORD:-}
     volumes:
-      - ./config.json:/app/config.json
+      - ru_bot_data:/app/data
+
+volumes:
+  ru_bot_data:
