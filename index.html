@@ -744,20 +744,13 @@
   <!-- ===== Setup Banner ===== -->
   <div id="setup-banner" style="display:none;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:10px;">
-      <h2 style="margin:0;">⚙️ Configurações do Sistema</h2>
+      <h2 style="margin:0;">🎓 Credenciais do Portal UFSM</h2>
       <button class="btn btn-ghost" style="padding:4px 8px; font-size:12px;" onclick="toggleSetup()">✕ Fechar</button>
     </div>
 
-    <!-- Abas -->
-    <div style="display:flex; gap:8px; margin-bottom:16px;">
-      <button id="tab-btn-ufsm" class="btn btn-primary" style="font-size:12px; padding:6px 14px;" onclick="switchConfigTab('ufsm')">🎓 Credenciais UFSM</button>
-      <button id="tab-btn-gh" class="btn btn-secondary" style="font-size:12px; padding:6px 14px;" onclick="switchConfigTab('gh')">🐙 Integração GitHub (Opcional)</button>
-    </div>
-
-    <!-- Aba UFSM -->
-    <div id="tab-content-ufsm">
+    <div>
       <p>
-        Informe sua matrícula e senha do Portal UFSM. Elas serão salvas localmente no <code>config.json</code> para que o bot possa efetuar o agendamento das suas refeições.
+        Informe sua matrícula e senha do Portal UFSM. Elas serão salvas no <code>config.json</code> para que o bot possa efetuar o agendamento automático nos prazos oficiais.
       </p>
       <div class="setup-fields setup-fields-2">
         <div class="field-group">
@@ -774,38 +767,13 @@
         <button class="btn btn-danger" onclick="clearUfsmCredentials()">Remover Credenciais</button>
       </div>
     </div>
-
-    <!-- Aba GitHub -->
-    <div id="tab-content-gh" style="display:none;">
-      <p>
-        Caso queira sincronizar as configurações com o repositório remoto via API do GitHub, informe seu Personal Access Token (escopo <code>repo</code>), usuário e repositório.
-      </p>
-      <div class="setup-fields">
-        <div class="field-group">
-          <label>GitHub Token (PAT)</label>
-          <input type="password" id="input-pat" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" />
-        </div>
-        <div class="field-group">
-          <label>Usuário / Organização</label>
-          <input type="text" id="input-owner" placeholder="seu-usuario" />
-        </div>
-        <div class="field-group">
-          <label>Repositório</label>
-          <input type="text" id="input-repo" placeholder="ru-bot" />
-        </div>
-      </div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
-        <button class="btn btn-primary" onclick="saveGitHubSettings()">Salvar Integração GitHub</button>
-        <button class="btn btn-danger" onclick="clearGitHubSettings()">Limpar Credenciais GitHub</button>
-      </div>
-    </div>
   </div>
 
   <!-- ===== Status Bar ===== -->
   <div class="status-bar" id="status-bar">
     <div class="status-chip">
-      <div class="status-dot grey" id="dot-gh"></div>
-      <span id="label-gh">GitHub não configurado</span>
+      <div class="status-dot green" id="dot-status"></div>
+      <span id="label-status">Bot Ativo</span>
     </div>
     <div class="status-chip">
       <div class="status-dot pulse green" id="dot-schedule"></div>
@@ -872,10 +840,7 @@
         ⬇️ Baixar config.json
       </button>
       <button class="btn btn-primary" id="btn-save-local" onclick="saveConfigLocal()">
-        💾 Salvar no Computador / Servidor
-      </button>
-      <button class="btn btn-secondary" id="btn-commit" onclick="commitConfig()" title="Opcional: salva no seu repositório GitHub via API">
-        🐙 Commitar no GitHub
+        💾 Salvar Configurações
       </button>
     </div>
   </div>
@@ -886,14 +851,10 @@
       <div class="card-title">📖 Como utilizar</div>
     </div>
     <ol style="padding-left: 18px; display:flex; flex-direction:column; gap:10px; font-size:13px; color: var(--text-secondary);">
-      <li>Clique em <strong>⚙️ Configurações</strong> no topo e preencha suas credenciais do Portal UFSM (matrícula e senha).</li>
-      <li>Defina os dias da semana, refeições e campus de sua preferência no painel acima.</li>
-      <li>Clique em <strong>💾 Salvar no Computador / Servidor</strong> para salvar as preferências diretamente no seu arquivo <code>config.json</code> (ou baixe o arquivo se estiver rodando via arquivo HTML estático).</li>
-      <li>Inicie o serviço do robô:
-        <br>• <strong>Sem Homelab / Local</strong>: execute o arquivo <code>iniciar.bat</code> (Windows) ou <code>python scheduler.py</code> no terminal.
-        <br>• <strong>Com Docker / Homelab / ZimaOS</strong>: execute <code>docker compose up -d</code>.
-      </li>
-      <li>O robô permanecerá rodando e fará as reservas automaticamente nos horários limites de cada refeição (11:30 para jantar, 13:00 para café e 22:00 para almoço).</li>
+      <li>Clique em <strong>⚙️ Configurações</strong> no topo e cadastre sua matrícula e senha da UFSM.</li>
+      <li>Escolha os dias da semana, o restaurante desejado (RU I ou RU II) e as refeições da sua preferência.</li>
+      <li>Clique no botão <strong>💾 Salvar Configurações</strong>. As opções serão salvas diretamente no servidor e já entrarão em vigor.</li>
+      <li>Não é necessário executar nenhum comando adicional após salvar: o bot já fica rodando continuamente em segundo plano e realiza as reservas sozinho nos horários limite (11:30 para jantar, 13:00 para café e 22:00 para almoço).</li>
     </ol>
     <div class="callout callout-warning" style="margin-top: 16px;">
       <div class="callout-icon">⚠️</div>
@@ -923,8 +884,6 @@ const CONFIG_FILE_PATH = 'config.json';
 // State
 // =========================================================
 let schedule = {};   // { Mon: { enabled, restaurant, vegetarian, coffee, lunch, dinner }, ... }
-let ghSettings = {}; // { pat, owner, repo }
-
 let ufsmCredentials = { username: '', password: '' };
 
 // =========================================================
@@ -932,7 +891,6 @@ let ufsmCredentials = { username: '', password: '' };
 // =========================================================
 window.addEventListener('DOMContentLoaded', () => {
   loadUfsmCredentials();
-  loadGitHubSettings();
   loadScheduleFromStorage();
   tryLoadConfigFromLocalServer();
   buildWeekGrid();
@@ -941,17 +899,6 @@ window.addEventListener('DOMContentLoaded', () => {
   updateDeadlines();
   setInterval(updateDeadlines, 60_000);
 });
-
-// =========================================================
-// Tab & Setup Navigation
-// =========================================================
-function switchConfigTab(tab) {
-  const isUfsm = tab === 'ufsm';
-  document.getElementById('tab-btn-ufsm').className = `btn ${isUfsm ? 'btn-primary' : 'btn-secondary'}`;
-  document.getElementById('tab-btn-gh').className = `btn ${isUfsm ? 'btn-secondary' : 'btn-primary'}`;
-  document.getElementById('tab-content-ufsm').style.display = isUfsm ? 'block' : 'none';
-  document.getElementById('tab-content-gh').style.display = isUfsm ? 'none' : 'block';
-}
 
 // =========================================================
 // UFSM Credentials
@@ -998,63 +945,6 @@ function clearUfsmCredentials() {
   document.getElementById('input-ufsm-pass').value = '';
   renderConfigPreview();
   toast('Credenciais da UFSM removidas.', 'info');
-}
-
-// =========================================================
-// GitHub Settings
-// =========================================================
-function loadGitHubSettings() {
-  try {
-    const raw = localStorage.getItem('ru-bot-gh');
-    if (raw) ghSettings = JSON.parse(raw);
-  } catch (_) {}
-  applyGitHubSettings();
-}
-
-function applyGitHubSettings() {
-  const { pat, owner, repo } = ghSettings;
-  const configured = !!(pat && owner && repo);
-
-  document.getElementById('dot-gh').className = `status-dot ${configured ? 'green' : 'grey'}`;
-  document.getElementById('label-gh').textContent = configured
-    ? `${owner}/${repo}`
-    : 'Execução Local / Homelab';
-
-  if (document.getElementById('input-pat').value === '') {
-    document.getElementById('input-pat').value = pat ? '••••••••••••••••••' : '';
-    document.getElementById('input-owner').value = owner || '';
-    document.getElementById('input-repo').value = repo || '';
-  }
-}
-
-function saveGitHubSettings() {
-  const patInput = document.getElementById('input-pat').value.trim();
-  const owner = document.getElementById('input-owner').value.trim();
-  const repo = document.getElementById('input-repo').value.trim();
-
-  if (!owner || !repo) {
-    toast('Preencha usuário e repositório.', 'error');
-    return;
-  }
-
-  // Keep old PAT if input is masked
-  const pat = patInput.startsWith('•') ? ghSettings.pat : patInput;
-  ghSettings = { pat, owner, repo };
-  localStorage.setItem('ru-bot-gh', JSON.stringify(ghSettings));
-  applyGitHubSettings();
-  toast('Configuração GitHub salva!', 'success');
-  toggleSetup();
-}
-
-function clearGitHubSettings() {
-  if (!confirm('Apagar credenciais GitHub do localStorage?')) return;
-  ghSettings = {};
-  localStorage.removeItem('ru-bot-gh');
-  document.getElementById('input-pat').value = '';
-  document.getElementById('input-owner').value = '';
-  document.getElementById('input-repo').value = '';
-  applyGitHubSettings();
-  toast('Credenciais removidas.', 'info');
 }
 
 function toggleSetup() {
@@ -1335,76 +1225,6 @@ function downloadConfig() {
   a.click();
   URL.revokeObjectURL(url);
   toast('config.json baixado!', 'success');
-}
-
-// =========================================================
-// Commit to GitHub via API
-// =========================================================
-async function commitConfig() {
-  const { pat, owner, repo } = ghSettings;
-  if (!pat || !owner || !repo) {
-    toast('Configure a integração GitHub primeiro (⚙️ Config).', 'error');
-    return;
-  }
-
-  const btn = document.getElementById('btn-commit');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Commitando...';
-
-  try {
-    const content = JSON.stringify(buildConfigObject(), null, 2);
-    const encoded = btoa(unescape(encodeURIComponent(content)));
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${CONFIG_FILE_PATH}`;
-
-    // Get current SHA (needed for updates)
-    let sha = null;
-    const getRes = await fetch(apiUrl, {
-      headers: {
-        Authorization: `token ${pat}`,
-        Accept: 'application/vnd.github.v3+json',
-      },
-    });
-
-    if (getRes.ok) {
-      const data = await getRes.json();
-      sha = data.sha;
-    } else if (getRes.status !== 404) {
-      throw new Error(`GitHub API error: ${getRes.status} ${getRes.statusText}`);
-    }
-
-    // Commit
-    const putBody = {
-      message: `chore: update meal schedule via RU Bot UI [${new Date().toISOString().slice(0, 10)}]`,
-      content: encoded,
-      ...(sha && { sha }),
-    };
-
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: `token ${pat}`,
-        Accept: 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(putBody),
-    });
-
-    if (!putRes.ok) {
-      const errData = await putRes.json().catch(() => ({}));
-      throw new Error(errData.message || `${putRes.status} ${putRes.statusText}`);
-    }
-
-    const saveStatus = document.getElementById('save-status');
-    saveStatus.textContent = `Commitado com sucesso em ${new Date().toLocaleTimeString('pt-BR')}`;
-    saveStatus.style.color = 'var(--green)';
-    toast('config.json commitado no GitHub!', 'success');
-  } catch (err) {
-    console.error(err);
-    toast(`Erro ao commitar: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🚀 Commitar no GitHub';
-  }
 }
 
 // =========================================================
