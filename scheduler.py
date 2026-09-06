@@ -327,20 +327,20 @@ def run_daemon_loop(config_path: str = "config.json") -> None:
             hour = now.hour
             minute = now.minute
 
-            # Dinner trigger window: 11:30 - 11:35
-            if (hour == 11 and 30 <= minute <= 35) and last_triggered.get((current_day, "dinner")) is None:
+            # Dinner trigger window: 09:30 - 09:35 (2h before 11:30)
+            if (hour == 9 and 30 <= minute <= 35) and last_triggered.get((current_day, "dinner")) is None:
                 logger.info("Triggering scheduled check: Dinner (today)")
                 run_single_cycle(config_path, meal_filter="dinner")
                 last_triggered[(current_day, "dinner")] = True
 
-            # Coffee trigger window: 13:00 - 13:05
-            if (hour == 13 and 0 <= minute <= 5) and last_triggered.get((current_day, "coffee")) is None:
+            # Coffee trigger window: 11:00 - 11:05 (2h before 13:00)
+            if (hour == 11 and 0 <= minute <= 5) and last_triggered.get((current_day, "coffee")) is None:
                 logger.info("Triggering scheduled check: Coffee (tomorrow)")
                 run_single_cycle(config_path, meal_filter="coffee")
                 last_triggered[(current_day, "coffee")] = True
 
-            # Lunch trigger window: 22:00 - 22:05
-            if (hour == 22 and 0 <= minute <= 5) and last_triggered.get((current_day, "lunch")) is None:
+            # Lunch trigger window: 20:00 - 20:05 (2h before 22:00)
+            if (hour == 20 and 0 <= minute <= 5) and last_triggered.get((current_day, "lunch")) is None:
                 logger.info("Triggering scheduled check: Lunch (tomorrow)")
                 run_single_cycle(config_path, meal_filter="lunch")
                 last_triggered[(current_day, "lunch")] = True
