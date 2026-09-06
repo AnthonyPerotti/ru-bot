@@ -102,3 +102,13 @@ ru-bot/
 
 - Este projeto foi desenvolvido para fins educacionais e uso pessoal.
 - Lembre-se de cancelar previamente agendamentos caso nao va comparecer ao refeitorio, evitando desperdicio de alimentos e multas no sistema da instituicao.
+
+---
+
+## Licenca
+
+Distribuido sob a licenca Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0).
+Consulte o arquivo `LICENSE` para mais detalhes. Em resumo:
+- Compartilhamento e adaptacao permitidos com os devidos creditos.
+- Derivacoes e melhorias devem ser distribuidas sob a mesma licenca.
+- Uso comercial proibido.
