@@ -44,8 +44,24 @@ class CustomHandler(SimpleHTTPRequestHandler):
 
                 config_path = get_config_path()
                 os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+                # Read existing config to preserve internal fields (e.g. device_id)
+                existing = {}
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, "r", encoding="utf-8") as f:
+                            existing = json.load(f)
+                    except Exception:
+                        existing = {}
+
+                # Merge: only update fields that the frontend manages
+                if "schedules" in payload:
+                    existing["schedules"] = payload["schedules"]
+                if "credentials" in payload:
+                    existing["credentials"] = payload["credentials"]
+
                 with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, indent=2, ensure_ascii=False)
+                    json.dump(existing, f, indent=2, ensure_ascii=False)
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
