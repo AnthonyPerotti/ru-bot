@@ -366,42 +366,172 @@ def run_single_cycle(config_path: str = "config.json", meal_filter: str | None =
                 logger.error("Failed scheduling for %s (%s) at %s: %s", weekday, target_date.strftime("%Y-%m-%d"), rest_label, err)
 
 
+def _run_single_cycle_tracked(config_path: str, meal_filter: str) -> bool:
+    """
+    Wrapper around run_single_cycle that returns True if all meals were
+    successfully scheduled, False if any failure occurred.
+    """
+    config = load_config(config_path)
+    schedules = config.get("schedules", [])
+    if not schedules:
+        return True  # nothing to do is not a failure
+
+    username, password = get_credentials(config)
+    if not username or not password:
+        logger.error("Missing UFSM credentials.")
+        return False
+
+    if not WEB_SCHEDULER_AVAILABLE:
+        logger.error("web_scheduler module not available.")
+        return False
+
+    now = datetime.now(TIMEZONE)
+    today = now
+    tomorrow = now + timedelta(days=1)
+
+    plan = {
+        "tomorrow": {
+            "date": tomorrow,
+            "weekday": tomorrow.strftime("%a"),
+            "meals": ["coffee", "lunch"],
+        },
+        "today": {
+            "date": today,
+            "weekday": today.strftime("%a"),
+            "meals": ["dinner"],
+        },
+    }
+
+    if meal_filter in ["coffee", "lunch"]:
+        plan["tomorrow"]["meals"] = [meal_filter]
+        plan["today"]["meals"] = []
+    elif meal_filter == "dinner":
+        plan["tomorrow"]["meals"] = []
+        plan["today"]["meals"] = ["dinner"]
+
+    all_ok = True
+
+    for bucket in plan.values():
+        target_date = bucket["date"]
+        weekday = bucket["weekday"]
+        allowed_meals = bucket["meals"]
+        if not allowed_meals:
+            continue
+
+        schedule_entry = find_schedule_for_weekday(schedules, weekday)
+        if not schedule_entry:
+            continue
+
+        meals_to_schedule = [m for m in allowed_meals if schedule_entry.get(m) is True]
+        if not meals_to_schedule:
+            continue
+
+        preferred_rest = schedule_entry.get("restaurant", 1)
+        is_veg = schedule_entry.get("vegetarian", False)
+
+        restaurant_meal_groups: dict[int, list[str]] = {}
+        for meal in meals_to_schedule:
+            code = _MEAL_CODE_MAP.get(meal)
+            if not code:
+                continue
+            if meal in ["coffee", "dinner"] and preferred_rest == 2:
+                restaurant_meal_groups.setdefault(1, []).append(code)
+            else:
+                restaurant_meal_groups.setdefault(preferred_rest, []).append(code)
+
+        for target_rest, meal_codes in restaurant_meal_groups.items():
+            rest_label = "RU II (Campus II)" if target_rest == 2 else "RU I (Campus I)"
+            try:
+                results = run_web_schedule(
+                    username=username,
+                    password=password,
+                    target_date=target_date,
+                    restaurant_id=target_rest,
+                    is_veg=is_veg,
+                    meals=meal_codes,
+                )
+                for meal_code, success in results.items():
+                    if success:
+                        logger.info("[OK] %s on %s at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
+                    else:
+                        logger.error("[FAIL] %s on %s at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
+                        all_ok = False
+            except Exception as err:
+                logger.error("Error scheduling %s at %s: %s", meal_codes, rest_label, err)
+                all_ok = False
+
+    return all_ok
+
+
 def run_daemon_loop(config_path: str = "config.json") -> None:
+    """
+    Continuous scheduling daemon.
+
+    Each meal has a hard deadline imposed by the UFSM portal:
+      - Dinner  -> 11:30 (same day)
+      - Coffee  -> 13:00 (next day)
+      - Lunch   -> 22:00 (next day)
+
+    Attempt 1 runs 2 hours before the deadline.
+    If attempt 1 fails (server error, captcha failure, etc.) the state is
+    recorded as "failed" and attempt 2 runs 30 minutes before the deadline.
+    A successful attempt (in either window) marks the meal as "ok" for that day.
+    """
     logger.info("RU Bot daemon started. Running in continuous mode (America/Sao_Paulo).")
-    # Target execution windows:
-    # 11:30 -> Dinner (same day)
-    # 13:00 -> Coffee (next day)
-    # 22:00 -> Lunch (next day)
-    last_triggered = {}
+
+    # Values: None (not attempted), "failed" (attempt 1 failed), "ok" (done)
+    status: dict[tuple, str] = {}
+
+    # Each entry: (meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end)
+    # fa = first attempt (2h before deadline), rt = retry (30min before deadline)
+    WINDOWS = [
+        # Dinner: deadline 11:30 -> first at 09:30-09:35, retry at 11:00-11:05
+        ("dinner", 9, 30, 35, 11, 0, 5),
+        # Coffee: deadline 13:00 -> first at 11:00-11:05, retry at 12:30-12:35
+        ("coffee", 11, 0, 5, 12, 30, 35),
+        # Lunch: deadline 22:00 -> first at 20:00-20:05, retry at 21:30-21:35
+        ("lunch", 20, 0, 5, 21, 30, 35),
+    ]
 
     while True:
         try:
             now = datetime.now(TIMEZONE)
             current_day = now.strftime("%Y-%m-%d")
-            hour = now.hour
-            minute = now.minute
+            h = now.hour
+            m = now.minute
 
-            # Dinner trigger window: 09:30 - 09:35 (2h before 11:30)
-            if (hour == 9 and 30 <= minute <= 35) and last_triggered.get((current_day, "dinner")) is None:
-                logger.info("Triggering scheduled check: Dinner (today)")
-                run_single_cycle(config_path, meal_filter="dinner")
-                last_triggered[(current_day, "dinner")] = True
+            for meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end in WINDOWS:
+                key = (current_day, meal)
+                current_status = status.get(key)
 
-            # Coffee trigger window: 11:00 - 11:05 (2h before 13:00)
-            if (hour == 11 and 0 <= minute <= 5) and last_triggered.get((current_day, "coffee")) is None:
-                logger.info("Triggering scheduled check: Coffee (tomorrow)")
-                run_single_cycle(config_path, meal_filter="coffee")
-                last_triggered[(current_day, "coffee")] = True
+                # First attempt window (2h before deadline)
+                in_first_window = (h == fa_h and fa_m_start <= m <= fa_m_end)
+                # Retry window (30min before deadline)
+                in_retry_window = (h == rt_h and rt_m_start <= m <= rt_m_end)
 
-            # Lunch trigger window: 20:00 - 20:05 (2h before 22:00)
-            if (hour == 20 and 0 <= minute <= 5) and last_triggered.get((current_day, "lunch")) is None:
-                logger.info("Triggering scheduled check: Lunch (tomorrow)")
-                run_single_cycle(config_path, meal_filter="lunch")
-                last_triggered[(current_day, "lunch")] = True
+                if in_first_window and current_status is None:
+                    logger.info("Attempt 1/2 — scheduling: %s", meal)
+                    ok = _run_single_cycle_tracked(config_path, meal_filter=meal)
+                    status[key] = "ok" if ok else "failed"
+                    if not ok:
+                        logger.warning(
+                            "Attempt 1 failed for %s. Retry scheduled in the next window.", meal
+                        )
 
-            # Housekeeping old trigger keys
-            if len(last_triggered) > 20:
-                last_triggered = {k: v for k, v in last_triggered.items() if k[0] == current_day}
+                elif in_retry_window and current_status == "failed":
+                    logger.warning("Attempt 2/2 (retry) — scheduling: %s", meal)
+                    ok = _run_single_cycle_tracked(config_path, meal_filter=meal)
+                    status[key] = "ok" if ok else "failed"
+                    if ok:
+                        logger.info("Retry succeeded for %s.", meal)
+                    else:
+                        logger.error(
+                            "Retry also failed for %s. No more attempts will be made today.", meal
+                        )
+
+            # Housekeeping: discard state older than today
+            if len(status) > 30:
+                status = {k: v for k, v in status.items() if k[0] == current_day}
 
         except Exception as err:
             logger.error("Unexpected error in daemon loop: %s", err)
