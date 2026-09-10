@@ -441,26 +441,61 @@ def _run_single_cycle_tracked(config_path: str, meal_filter: str) -> bool:
 
         for target_rest, meal_codes in restaurant_meal_groups.items():
             rest_label = "RU II (Campus II)" if target_rest == 2 else "RU I (Campus I)"
-            try:
-                results = run_web_schedule(
-                    username=username,
-                    password=password,
-                    target_date=target_date,
-                    restaurant_id=target_rest,
-                    is_veg=is_veg,
-                    meals=meal_codes,
-                )
-                for meal_code, success in results.items():
-                    if success:
-                        logger.info("[OK] %s on %s at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
-                    else:
-                        logger.error("[FAIL] %s on %s at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
-                        all_ok = False
-            except Exception as err:
-                logger.error("Error scheduling %s at %s: %s", meal_codes, rest_label, err)
+
+            _MAX_INNER_ATTEMPTS = 3
+            _INNER_RETRY_DELAY = 60  # seconds between internal retries
+
+            group_ok = False
+            for inner_attempt in range(1, _MAX_INNER_ATTEMPTS + 1):
+                try:
+                    results = run_web_schedule(
+                        username=username,
+                        password=password,
+                        target_date=target_date,
+                        restaurant_id=target_rest,
+                        is_veg=is_veg,
+                        meals=meal_codes,
+                    )
+                    attempt_ok = True
+                    for meal_code, success in results.items():
+                        if success:
+                            logger.info(
+                                "[OK] %s on %s at %s (attempt %d/%d).",
+                                meal_code, target_date.strftime("%Y-%m-%d"),
+                                rest_label, inner_attempt, _MAX_INNER_ATTEMPTS,
+                            )
+                        else:
+                            logger.error(
+                                "[FAIL] %s on %s at %s (attempt %d/%d).",
+                                meal_code, target_date.strftime("%Y-%m-%d"),
+                                rest_label, inner_attempt, _MAX_INNER_ATTEMPTS,
+                            )
+                            attempt_ok = False
+
+                    if attempt_ok:
+                        group_ok = True
+                        break  # success — no need to retry
+
+                except Exception as err:
+                    logger.error(
+                        "Error scheduling %s at %s (attempt %d/%d): %s",
+                        meal_codes, rest_label, inner_attempt, _MAX_INNER_ATTEMPTS, err,
+                    )
+
+                # If there are more attempts left, wait before retrying
+                if inner_attempt < _MAX_INNER_ATTEMPTS:
+                    logger.warning(
+                        "Waiting %ds before retry %d/%d for %s at %s...",
+                        _INNER_RETRY_DELAY, inner_attempt + 1, _MAX_INNER_ATTEMPTS,
+                        meal_codes, rest_label,
+                    )
+                    time.sleep(_INNER_RETRY_DELAY)
+
+            if not group_ok:
                 all_ok = False
 
     return all_ok
+
 
 
 def _get_trigger_path(config_path: str) -> str:
