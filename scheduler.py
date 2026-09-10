@@ -328,29 +328,42 @@ def run_single_cycle(config_path: str = "config.json", meal_filter: str | None =
 
         preferred_rest = schedule_entry.get("restaurant", 1)
         is_veg = schedule_entry.get("vegetarian", False)
-        meal_codes = [_MEAL_CODE_MAP[m] for m in meals_to_schedule if m in _MEAL_CODE_MAP]
 
-        logger.info(
-            "Scheduling for %s (%s): %s at restaurant %d (vegetarian=%s) via web portal",
-            weekday, target_date.strftime("%Y-%m-%d"), meal_codes, preferred_rest, is_veg
-        )
+        # RU II (Campus II) only serves lunch.
+        # Coffee and dinner must always be routed to RU I (Campus I).
+        restaurant_meal_groups: dict[int, list[str]] = {}
+        for meal in meals_to_schedule:
+            code = _MEAL_CODE_MAP.get(meal)
+            if not code:
+                continue
+            if meal in ["coffee", "dinner"] and preferred_rest == 2:
+                restaurant_meal_groups.setdefault(1, []).append(code)
+            else:
+                restaurant_meal_groups.setdefault(preferred_rest, []).append(code)
 
-        try:
-            results = run_web_schedule(
-                username=username,
-                password=password,
-                target_date=target_date,
-                restaurant_id=preferred_rest,
-                is_veg=is_veg,
-                meals=meal_codes,
+        for target_rest, meal_codes in restaurant_meal_groups.items():
+            rest_label = "RU II (Campus II)" if target_rest == 2 else "RU I (Campus I)"
+            logger.info(
+                "Scheduling for %s (%s): %s at %s (vegetarian=%s) via web portal",
+                weekday, target_date.strftime("%Y-%m-%d"), meal_codes, rest_label, is_veg
             )
-            for meal_code, success in results.items():
-                if success:
-                    logger.info("[OK] %s on %s scheduled successfully.", meal_code, target_date.strftime("%Y-%m-%d"))
-                else:
-                    logger.error("[FAIL] %s on %s could not be scheduled.", meal_code, target_date.strftime("%Y-%m-%d"))
-        except Exception as err:
-            logger.error("Failed scheduling for %s (%s): %s", weekday, target_date.strftime("%Y-%m-%d"), err)
+
+            try:
+                results = run_web_schedule(
+                    username=username,
+                    password=password,
+                    target_date=target_date,
+                    restaurant_id=target_rest,
+                    is_veg=is_veg,
+                    meals=meal_codes,
+                )
+                for meal_code, success in results.items():
+                    if success:
+                        logger.info("[OK] %s on %s scheduled successfully at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
+                    else:
+                        logger.error("[FAIL] %s on %s could not be scheduled at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
+            except Exception as err:
+                logger.error("Failed scheduling for %s (%s) at %s: %s", weekday, target_date.strftime("%Y-%m-%d"), rest_label, err)
 
 
 def run_daemon_loop(config_path: str = "config.json") -> None:

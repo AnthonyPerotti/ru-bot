@@ -193,6 +193,8 @@ def schedule_meals_web(
             viewport={"width": 1280, "height": 900},
         )
         page = context.new_page()
+        # Automatically accept confirmation dialogs (e.g. dinner time limit reminder)
+        page.on("dialog", lambda dialog: dialog.accept())
 
         try:
             # Step 1: Login
