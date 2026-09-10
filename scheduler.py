@@ -262,108 +262,12 @@ _MEAL_CODE_MAP = {
 
 
 def run_single_cycle(config_path: str = "config.json", meal_filter: str | None = None) -> None:
-    config = load_config(config_path)
-    schedules = config.get("schedules", [])
-    if not schedules:
-        logger.warning("No schedules defined in %s. Nothing to do.", config_path)
-        return
-
-    username, password = get_credentials(config)
-    if not username or not password:
-        logger.error("Missing UFSM credentials. Set them in config.json or via UFSM_USERNAME/UFSM_PASSWORD.")
-        return
-
-    if not WEB_SCHEDULER_AVAILABLE:
-        logger.error(
-            "web_scheduler module not available. "
-            "Ensure playwright, ddddocr, and faster-whisper are installed and web_scheduler.py exists."
-        )
-        return
-
-    now = datetime.now(TIMEZONE)
-    today = now
-    tomorrow = now + timedelta(days=1)
-
-    # Coffee: booked 1 day ahead (cutoff ~13h previous day)
-    # Lunch: booked 1 day ahead (cutoff ~22h previous day)
-    # Dinner: booked same day (cutoff ~11h30 same day)
-    plan = {
-        "tomorrow": {
-            "date": tomorrow,
-            "weekday": tomorrow.strftime("%a"),
-            "meals": ["coffee", "lunch"],
-        },
-        "today": {
-            "date": today,
-            "weekday": today.strftime("%a"),
-            "meals": ["dinner"],
-        },
-    }
-
-    if meal_filter:
-        if meal_filter in ["coffee", "lunch"]:
-            plan["tomorrow"]["meals"] = [meal_filter]
-            plan["today"]["meals"] = []
-        elif meal_filter == "dinner":
-            plan["tomorrow"]["meals"] = []
-            plan["today"]["meals"] = ["dinner"]
-
-    for bucket in plan.values():
-        target_date = bucket["date"]
-        weekday = bucket["weekday"]
-        allowed_meals = bucket["meals"]
-        if not allowed_meals:
-            continue
-
-        schedule_entry = find_schedule_for_weekday(schedules, weekday)
-        if not schedule_entry:
-            logger.info("No schedule configured for %s (%s). Skipping.", weekday, target_date.strftime("%Y-%m-%d"))
-            continue
-
-        meals_to_schedule = [
-            meal for meal in allowed_meals if schedule_entry.get(meal) is True
-        ]
-        if not meals_to_schedule:
-            continue
-
-        preferred_rest = schedule_entry.get("restaurant", 1)
-        is_veg = schedule_entry.get("vegetarian", False)
-
-        # RU II (Campus II) only serves lunch.
-        # Coffee and dinner must always be routed to RU I (Campus I).
-        restaurant_meal_groups: dict[int, list[str]] = {}
-        for meal in meals_to_schedule:
-            code = _MEAL_CODE_MAP.get(meal)
-            if not code:
-                continue
-            if meal in ["coffee", "dinner"] and preferred_rest == 2:
-                restaurant_meal_groups.setdefault(1, []).append(code)
-            else:
-                restaurant_meal_groups.setdefault(preferred_rest, []).append(code)
-
-        for target_rest, meal_codes in restaurant_meal_groups.items():
-            rest_label = "RU II (Campus II)" if target_rest == 2 else "RU I (Campus I)"
-            logger.info(
-                "Scheduling for %s (%s): %s at %s (vegetarian=%s) via web portal",
-                weekday, target_date.strftime("%Y-%m-%d"), meal_codes, rest_label, is_veg
-            )
-
-            try:
-                results = run_web_schedule(
-                    username=username,
-                    password=password,
-                    target_date=target_date,
-                    restaurant_id=target_rest,
-                    is_veg=is_veg,
-                    meals=meal_codes,
-                )
-                for meal_code, success in results.items():
-                    if success:
-                        logger.info("[OK] %s on %s scheduled successfully at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
-                    else:
-                        logger.error("[FAIL] %s on %s could not be scheduled at %s.", meal_code, target_date.strftime("%Y-%m-%d"), rest_label)
-            except Exception as err:
-                logger.error("Failed scheduling for %s (%s) at %s: %s", weekday, target_date.strftime("%Y-%m-%d"), rest_label, err)
+    """
+    One-shot scheduling run. Used by --once CLI mode.
+    Delegates to _run_single_cycle_tracked so that retry logic, routing,
+    and logging are identical to what the daemon uses.
+    """
+    _run_single_cycle_tracked(config_path, meal_filter=meal_filter or "")
 
 
 def _run_single_cycle_tracked(config_path: str, meal_filter: str) -> bool:
