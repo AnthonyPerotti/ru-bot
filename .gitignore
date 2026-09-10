@@ -9,3 +9,8 @@ build/
 *.log
 .DS_Store
 Thumbs.db
+*.png
+*.mp3
+scratch*.html
+agendamento.js
+

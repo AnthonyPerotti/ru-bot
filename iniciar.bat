@@ -17,8 +17,9 @@ if %errorlevel% neq 0 (
 
 echo [1/3] Verificando e instalando dependencias...
 pip install -r requirements.txt >nul 2>&1
+playwright install chromium >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [AVISO] Falha ao executar pip install automaticamente. Continuando...
+    echo [AVISO] Falha ao executar pip/playwright install automaticamente. Continuando...
 )
 
 echo.

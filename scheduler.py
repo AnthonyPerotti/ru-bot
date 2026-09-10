@@ -14,15 +14,33 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Force IPv4 resolution to avoid potential network routing issues
+# Import the web-based scheduler (uses OCR instead of broken mobile API)
+try:
+    from web_scheduler import run_web_schedule
+    WEB_SCHEDULER_AVAILABLE = True
+except ImportError:
+    WEB_SCHEDULER_AVAILABLE = False
+
+_prefer_ipv6 = None
+
 def allowed_gai_family():
-    return socket.AF_INET
+    global _prefer_ipv6
+    if _prefer_ipv6 is None:
+        try:
+            s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            s.settimeout(1.5)
+            s.connect(("2804:0:4000:4::123", 443))
+            s.close()
+            _prefer_ipv6 = True
+        except Exception:
+            _prefer_ipv6 = False
+    return socket.AF_INET6 if _prefer_ipv6 else socket.AF_INET
 
 urllib3_conn.allowed_gai_family = allowed_gai_family
 
 # --- Configuration ---
 
-BASE_URL = "https://portal.ufsm.br/mobile/webservice"
+BASE_URL = "https://portal.ufsm.br/mobile/webservice"  # legacy mobile API (mostly broken)
 TIMEZONE = pytz.timezone("America/Sao_Paulo")
 
 APP_NAME = "UFSMDigital"
@@ -235,6 +253,14 @@ def find_schedule_for_weekday(schedules: list, weekday_abbr: str) -> dict | None
     return None
 
 
+# Internal meal code mapping: config key -> portal API code
+_MEAL_CODE_MAP = {
+    "coffee": "CAFE",
+    "lunch": "ALMOCO",
+    "dinner": "JANTAR",
+}
+
+
 def run_single_cycle(config_path: str = "config.json", meal_filter: str | None = None) -> None:
     config = load_config(config_path)
     schedules = config.get("schedules", [])
@@ -247,8 +273,12 @@ def run_single_cycle(config_path: str = "config.json", meal_filter: str | None =
         logger.error("Missing UFSM credentials. Set them in config.json or via UFSM_USERNAME/UFSM_PASSWORD.")
         return
 
-    device_id = get_or_generate_device_id(config, config_path)
-    token = login(username, password, device_id)
+    if not WEB_SCHEDULER_AVAILABLE:
+        logger.error(
+            "web_scheduler module not available. "
+            "Ensure playwright, ddddocr, and faster-whisper are installed and web_scheduler.py exists."
+        )
+        return
 
     now = datetime.now(TIMEZONE)
     today = now
@@ -298,16 +328,27 @@ def run_single_cycle(config_path: str = "config.json", meal_filter: str | None =
 
         preferred_rest = schedule_entry.get("restaurant", 1)
         is_veg = schedule_entry.get("vegetarian", False)
+        meal_codes = [_MEAL_CODE_MAP[m] for m in meals_to_schedule if m in _MEAL_CODE_MAP]
+
+        logger.info(
+            "Scheduling for %s (%s): %s at restaurant %d (vegetarian=%s) via web portal",
+            weekday, target_date.strftime("%Y-%m-%d"), meal_codes, preferred_rest, is_veg
+        )
 
         try:
-            schedule_meals_for_date_and_items(
-                token=token,
+            results = run_web_schedule(
+                username=username,
+                password=password,
                 target_date=target_date,
-                preferred_restaurant=preferred_rest,
+                restaurant_id=preferred_rest,
                 is_veg=is_veg,
-                meals_to_schedule=meals_to_schedule,
-                device_id=device_id,
+                meals=meal_codes,
             )
+            for meal_code, success in results.items():
+                if success:
+                    logger.info("[OK] %s on %s scheduled successfully.", meal_code, target_date.strftime("%Y-%m-%d"))
+                else:
+                    logger.error("[FAIL] %s on %s could not be scheduled.", meal_code, target_date.strftime("%Y-%m-%d"))
         except Exception as err:
             logger.error("Failed scheduling for %s (%s): %s", weekday, target_date.strftime("%Y-%m-%d"), err)
 

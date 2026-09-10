@@ -30,7 +30,7 @@
       "vegetarian": false,
       "coffee": false,
       "lunch": true,
-      "dinner": false
+      "dinner": true
     },
     {
       "weekday": "Fri",
@@ -40,5 +40,9 @@
       "lunch": true,
       "dinner": false
     }
-  ]
+  ],
+  "credentials": {
+    "username": "",
+    "password": ""
+  }
 }

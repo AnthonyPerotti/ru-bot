@@ -11,6 +11,7 @@ services:
       # ou passadas como variáveis de ambiente abaixo / via arquivo .env:
       - UFSM_USERNAME=${UFSM_USERNAME:-}
       - UFSM_PASSWORD=${UFSM_PASSWORD:-}
+    shm_size: '512m'
     volumes:
       - ru_bot_data:/app/data
 

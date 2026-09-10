@@ -87,8 +87,9 @@ ru-bot/
 ├── index.html              # Interface web responsiva
 ├── server.py               # Servidor HTTP local com API para salvar config.json
 ├── scheduler.py            # Agendador continuo (daemon) e pontual (--once)
-├── requirements.txt        # Dependencias Python (requests, pytz, python-dotenv)
-├── Dockerfile              # Imagem Docker leve baseada em Alpine
+├── web_scheduler.py        # Modulo de agendamento web com resolucao de captchas
+├── requirements.txt        # Dependencias Python
+├── Dockerfile              # Imagem Docker com Playwright e Whisper
 ├── docker-compose.yml      # Definicao do servico para Docker / Homelab / ZimaOS
 ├── iniciar.bat             # Inicializador automatico para Windows
 ├── iniciar.sh              # Inicializador automatico para Linux / macOS

@@ -1,18 +1,27 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim-bookworm
 
 # Set environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=America/Sao_Paulo
 
-# Install system dependencies (tzdata for accurate Brazil timezone handling)
-RUN apk add --no-cache tzdata
-
 WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright Chromium with system dependencies
+RUN playwright install --with-deps chromium
+
+# Pre-cache Whisper tiny model during build
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('tiny', device='cpu', compute_type='int8')"
 
 # Copy application files
 COPY . .

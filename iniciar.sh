@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 echo "=== RU Bot UFSM ==="
 echo "Instalando dependencias..."
 pip install -r requirements.txt
+playwright install chromium
 
 echo "Iniciando servidor web em http://localhost:3456..."
 python server.py &
