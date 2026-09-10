@@ -63,6 +63,15 @@ class CustomHandler(SimpleHTTPRequestHandler):
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(existing, f, indent=2, ensure_ascii=False)
 
+                # Signal the scheduler daemon to check immediately.
+                # The daemon polls for this file and acts on it within 30 seconds.
+                try:
+                    trigger_path = os.path.join(os.path.dirname(config_path), ".schedule_trigger")
+                    with open(trigger_path, "w") as tf:
+                        tf.write("1")
+                except Exception:
+                    pass  # non-critical — daemon will catch up on its own schedule
+
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")

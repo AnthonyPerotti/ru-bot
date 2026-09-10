@@ -463,6 +463,24 @@ def _run_single_cycle_tracked(config_path: str, meal_filter: str) -> bool:
     return all_ok
 
 
+def _get_trigger_path(config_path: str) -> str:
+    """Returns the path of the .schedule_trigger sentinel file."""
+    resolved = resolve_config_path(config_path)
+    return os.path.join(os.path.dirname(os.path.abspath(resolved)), ".schedule_trigger")
+
+
+def _check_and_consume_trigger(config_path: str) -> bool:
+    """Returns True (and deletes the file) if a trigger file exists."""
+    path = _get_trigger_path(config_path)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return True
+    return False
+
+
 def run_daemon_loop(config_path: str = "config.json") -> None:
     """
     Continuous scheduling daemon.
@@ -500,6 +518,7 @@ def run_daemon_loop(config_path: str = "config.json") -> None:
             h = now.hour
             m = now.minute
 
+            # --- Normal scheduling windows ---
             for meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end in WINDOWS:
                 key = (current_day, meal)
                 current_status = status.get(key)
@@ -528,6 +547,44 @@ def run_daemon_loop(config_path: str = "config.json") -> None:
                         logger.error(
                             "Retry also failed for %s. No more attempts will be made today.", meal
                         )
+
+            # --- Trigger file: user saved config via web UI ---
+            # If the save happened after the normal window, schedule immediately
+            # for any meal that is still within its portal deadline.
+            if _check_and_consume_trigger(config_path):
+                logger.info("Config save detected — checking for missed scheduling windows.")
+                current_minutes = h * 60 + m
+                for meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end in WINDOWS:
+                    key = (current_day, meal)
+                    if status.get(key) == "ok":
+                        continue  # already done today
+
+                    # Deadline (hard limit) for each meal in minutes since midnight:
+                    #   dinner -> 11:30, coffee -> 13:00, lunch -> 22:00
+                    deadline_map = {"dinner": 11 * 60 + 30, "coffee": 13 * 60, "lunch": 22 * 60}
+                    deadline_minutes = deadline_map[meal]
+
+                    # The first-attempt window start in minutes
+                    first_window_start = fa_h * 60 + fa_m_start
+
+                    # Act if we are past the first window start AND still before the deadline
+                    if current_minutes >= first_window_start and current_minutes < deadline_minutes:
+                        logger.warning(
+                            "Trigger: past normal window for %s — running immediate attempt "
+                            "(%.0f min before deadline).",
+                            meal,
+                            deadline_minutes - current_minutes,
+                        )
+                        ok = _run_single_cycle_tracked(config_path, meal_filter=meal)
+                        status[key] = "ok" if ok else "failed"
+                        if ok:
+                            logger.info("Trigger attempt succeeded for %s.", meal)
+                        else:
+                            logger.error(
+                                "Trigger attempt failed for %s. "
+                                "Will retry in the next normal window if still within deadline.",
+                                meal,
+                            )
 
             # Housekeeping: discard state older than today
             if len(status) > 30:
