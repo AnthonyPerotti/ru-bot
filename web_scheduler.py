@@ -202,14 +202,26 @@ def schedule_meals_web(
             page.goto(LOGIN_URL, wait_until="networkidle", timeout=30000)
             page.fill("input[name='j_username']", username)
             page.fill("input[name='j_password']", password)
-            page.click("button[type='submit'], input[type='submit']")
-            page.wait_for_load_state("networkidle", timeout=30000)
+            logger.info("Submitting login credentials...")
+            with page.expect_navigation(wait_until="networkidle", timeout=30000):
+                page.click("button[type='submit'], input[type='submit']")
+
+            # Validate authentication result
+            if "index.html" in page.url or page.locator("input[name='j_username']").count() > 0:
+                err_text = page.locator(".pill.danger, .pill.error").all_inner_texts()
+                raise RuntimeError(
+                    f"Authentication failed on portal: {err_text if err_text else 'still on login page'}"
+                )
 
             # Step 2: Open scheduling form
             logger.info("Opening scheduling form: %s", FORM_URL)
             page.goto(FORM_URL, wait_until="networkidle", timeout=30000)
 
+            if "index.html" in page.url:
+                raise RuntimeError("Redirected to login page when accessing scheduling form. Session was lost.")
+
             # Step 3: Fill dates
+            page.wait_for_selector("#data", state="visible", timeout=15000)
             page.fill("#data", date_str)
             page.fill("#periodo_fim", date_str)
 
@@ -307,6 +319,11 @@ def schedule_meals_web(
 
         except Exception as exc:
             logger.error("Exception during web scheduling: %s", exc)
+            try:
+                logger.error("Error occurred at page URL: %s", page.url)
+                page.screenshot(path="web_schedule_error.png")
+            except Exception:
+                pass
         finally:
             browser.close()
 

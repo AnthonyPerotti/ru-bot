@@ -420,109 +420,202 @@ def _check_and_consume_trigger(config_path: str) -> bool:
     return False
 
 
+# Scheduling rules per meal type:
+# - start: (hour, minute) when the initial attempt window opens
+# - deadline: (hour, minute) hard deadline enforced by the UFSM portal
+# - max_attempts: total scheduling rounds allowed per day (at least 3 retries spaced 1h apart)
+# - retry_interval_minutes: minimum interval in minutes between failed attempts
+MEAL_RULES = {
+    "dinner": {
+        "start": (7, 30),
+        "deadline": (11, 30),
+        "max_attempts": 5,
+        "retry_interval_minutes": 60,
+    },
+    "coffee": {
+        "start": (8, 0),
+        "deadline": (13, 0),
+        "max_attempts": 5,
+        "retry_interval_minutes": 60,
+    },
+    "lunch": {
+        "start": (17, 0),
+        "deadline": (22, 0),
+        "max_attempts": 5,
+        "retry_interval_minutes": 60,
+    },
+}
+
+
 def run_daemon_loop(config_path: str = "config.json") -> None:
     """
     Continuous scheduling daemon.
 
     Each meal has a hard deadline imposed by the UFSM portal:
       - Dinner  -> 11:30 (same day)
-      - Coffee  -> 13:00 (next day)
-      - Lunch   -> 22:00 (next day)
+      - Coffee  -> 13:00 (next day, scheduled on previous day)
+      - Lunch   -> 22:00 (next day, scheduled on previous day)
 
-    Attempt 1 runs 2 hours before the deadline.
-    If attempt 1 fails (server error, captcha failure, etc.) the state is
-    recorded as "failed" and attempt 2 runs 30 minutes before the deadline.
-    A successful attempt (in either window) marks the meal as "ok" for that day.
+    Attempts start several hours before the deadline and retry every 60 minutes
+    on failure (up to 5 attempts per meal), ensuring multiple spaced retry windows.
     """
     logger.info("RU Bot daemon started. Running in continuous mode (America/Sao_Paulo).")
 
-    # Values: None (not attempted), "failed" (attempt 1 failed), "ok" (done)
-    status: dict[tuple, str] = {}
-
-    # Each entry: (meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end)
-    # fa = first attempt (2h before deadline), rt = retry (30min before deadline)
-    WINDOWS = [
-        # Dinner: deadline 11:30 -> first at 09:30-09:35, retry at 11:00-11:05
-        ("dinner", 9, 30, 35, 11, 0, 5),
-        # Coffee: deadline 13:00 -> first at 11:00-11:05, retry at 12:30-12:35
-        ("coffee", 11, 0, 5, 12, 30, 35),
-        # Lunch: deadline 22:00 -> first at 20:00-20:05, retry at 21:30-21:35
-        ("lunch", 20, 0, 5, 21, 30, 35),
-    ]
+    # State per (date_str, meal): { "status": "pending"|"ok"|"failed"|"expired", "attempts": int, "last_attempt": datetime }
+    status: dict[tuple[str, str], dict] = {}
 
     while True:
         try:
             now = datetime.now(TIMEZONE)
             current_day = now.strftime("%Y-%m-%d")
-            h = now.hour
-            m = now.minute
+            current_minutes = now.hour * 60 + now.minute
 
-            # --- Normal scheduling windows ---
-            for meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end in WINDOWS:
+            # --- Check each meal schedule ---
+            for meal, rule in MEAL_RULES.items():
                 key = (current_day, meal)
-                current_status = status.get(key)
+                meal_state = status.setdefault(
+                    key,
+                    {
+                        "status": "pending",
+                        "attempts": 0,
+                        "last_attempt": None,
+                    },
+                )
 
-                # First attempt window (2h before deadline)
-                in_first_window = (h == fa_h and fa_m_start <= m <= fa_m_end)
-                # Retry window (30min before deadline)
-                in_retry_window = (h == rt_h and rt_m_start <= m <= rt_m_end)
+                # Skip if already successfully scheduled today
+                if meal_state["status"] == "ok":
+                    continue
 
-                if in_first_window and current_status is None:
-                    logger.info("Attempt 1/2 — scheduling: %s", meal)
-                    ok = _run_single_cycle_tracked(config_path, meal_filter=meal)
-                    status[key] = "ok" if ok else "failed"
-                    if not ok:
+                start_minutes = rule["start"][0] * 60 + rule["start"][1]
+                deadline_minutes = rule["deadline"][0] * 60 + rule["deadline"][1]
+                max_attempts = rule["max_attempts"]
+                retry_interval = rule["retry_interval_minutes"]
+
+                # If deadline has passed, mark as expired and stop trying today
+                if current_minutes >= deadline_minutes:
+                    if meal_state["status"] != "expired":
+                        meal_state["status"] = "expired"
                         logger.warning(
-                            "Attempt 1 failed for %s. Retry scheduled in the next window.", meal
+                            "Deadline reached for %s (%02d:%02d). No further attempts today.",
+                            meal,
+                            rule["deadline"][0],
+                            rule["deadline"][1],
                         )
+                    continue
 
-                elif in_retry_window and current_status == "failed":
-                    logger.warning("Attempt 2/2 (retry) — scheduling: %s", meal)
+                # If before start window, wait
+                if current_minutes < start_minutes:
+                    continue
+
+                # Check if max attempts reached
+                if meal_state["attempts"] >= max_attempts:
+                    continue
+
+                # Decide if an attempt should be made now
+                should_run = False
+                if meal_state["attempts"] == 0:
+                    # First attempt of the day
+                    should_run = True
+                else:
+                    # Retry: check if at least retry_interval_minutes elapsed
+                    last_attempt = meal_state["last_attempt"]
+                    if last_attempt is not None:
+                        elapsed = (now - last_attempt).total_seconds() / 60
+                        # Standard 1-hour retry, or emergency final retry 20m before deadline
+                        minutes_to_deadline = deadline_minutes - current_minutes
+                        if elapsed >= retry_interval or (minutes_to_deadline <= 20 and elapsed >= 15):
+                            should_run = True
+
+                if should_run:
+                    attempt_num = meal_state["attempts"] + 1
+                    is_retry = meal_state["attempts"] > 0
+                    retry_label = " (retry)" if is_retry else ""
+
+                    logger.info(
+                        "Attempt %d/%d%s — scheduling: %s (deadline: %02d:%02d)",
+                        attempt_num,
+                        max_attempts,
+                        retry_label,
+                        meal,
+                        rule["deadline"][0],
+                        rule["deadline"][1],
+                    )
+
                     ok = _run_single_cycle_tracked(config_path, meal_filter=meal)
-                    status[key] = "ok" if ok else "failed"
+                    meal_state["attempts"] = attempt_num
+                    meal_state["last_attempt"] = now
+
                     if ok:
-                        logger.info("Retry succeeded for %s.", meal)
+                        meal_state["status"] = "ok"
+                        logger.info("Attempt %d/%d succeeded for %s.", attempt_num, max_attempts, meal)
                     else:
-                        logger.error(
-                            "Retry also failed for %s. No more attempts will be made today.", meal
-                        )
+                        meal_state["status"] = "failed"
+                        remaining = max_attempts - attempt_num
+                        if remaining > 0 and (deadline_minutes - current_minutes > 25):
+                            logger.warning(
+                                "Attempt %d/%d failed for %s. Next retry in ~%d minutes (deadline is %02d:%02d).",
+                                attempt_num,
+                                max_attempts,
+                                meal,
+                                retry_interval,
+                                rule["deadline"][0],
+                                rule["deadline"][1],
+                            )
+                        else:
+                            logger.error(
+                                "Retry attempts exhausted for %s today (%d/%d attempts).",
+                                meal,
+                                attempt_num,
+                                max_attempts,
+                            )
 
             # --- Trigger file: user saved config via web UI ---
-            # If the save happened after the normal window, schedule immediately
-            # for any meal that is still within its portal deadline.
             if _check_and_consume_trigger(config_path):
-                logger.info("Config save detected — checking for missed scheduling windows.")
-                current_minutes = h * 60 + m
-                for meal, fa_h, fa_m_start, fa_m_end, rt_h, rt_m_start, rt_m_end in WINDOWS:
+                logger.info("Config save detected — checking for pending meals within deadlines.")
+                for meal, rule in MEAL_RULES.items():
                     key = (current_day, meal)
-                    if status.get(key) == "ok":
-                        continue  # already done today
+                    meal_state = status.setdefault(
+                        key,
+                        {
+                            "status": "pending",
+                            "attempts": 0,
+                            "last_attempt": None,
+                        },
+                    )
 
-                    # Deadline (hard limit) for each meal in minutes since midnight:
-                    #   dinner -> 11:30, coffee -> 13:00, lunch -> 22:00
-                    deadline_map = {"dinner": 11 * 60 + 30, "coffee": 13 * 60, "lunch": 22 * 60}
-                    deadline_minutes = deadline_map[meal]
+                    if meal_state["status"] == "ok":
+                        continue
 
-                    # The first-attempt window start in minutes
-                    first_window_start = fa_h * 60 + fa_m_start
+                    start_minutes = rule["start"][0] * 60 + rule["start"][1]
+                    deadline_minutes = rule["deadline"][0] * 60 + rule["deadline"][1]
 
-                    # Act if we are past the first window start AND still before the deadline
-                    if current_minutes >= first_window_start and current_minutes < deadline_minutes:
-                        logger.warning(
-                            "Trigger: past normal window for %s — running immediate attempt "
-                            "(%.0f min before deadline).",
+                    if current_minutes >= start_minutes and current_minutes < deadline_minutes:
+                        attempt_num = meal_state["attempts"] + 1
+                        max_attempts = rule["max_attempts"]
+                        logger.info(
+                            "Trigger: running immediate attempt %d/%d for %s (%02d min before deadline)...",
+                            attempt_num,
+                            max_attempts,
                             meal,
                             deadline_minutes - current_minutes,
                         )
                         ok = _run_single_cycle_tracked(config_path, meal_filter=meal)
-                        status[key] = "ok" if ok else "failed"
+                        meal_state["attempts"] = attempt_num
+                        meal_state["last_attempt"] = now
+
                         if ok:
-                            logger.info("Trigger attempt succeeded for %s.", meal)
+                            meal_state["status"] = "ok"
+                            logger.info("Trigger attempt %d/%d succeeded for %s.", attempt_num, max_attempts, meal)
                         else:
-                            logger.error(
-                                "Trigger attempt failed for %s. "
-                                "Will retry in the next normal window if still within deadline.",
+                            meal_state["status"] = "failed"
+                            logger.warning(
+                                "Trigger attempt %d/%d failed for %s. Will retry every %d minutes until %02d:%02d.",
+                                attempt_num,
+                                max_attempts,
                                 meal,
+                                rule["retry_interval_minutes"],
+                                rule["deadline"][0],
+                                rule["deadline"][1],
                             )
 
             # Housekeeping: discard state older than today
