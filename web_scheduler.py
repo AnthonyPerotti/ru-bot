@@ -180,8 +180,18 @@ def solve_recaptcha(page, max_retries: int = 3) -> bool:
                 # Try to get a fresh challenge by clicking the reload button
                 reload_btn = bframe.locator("#recaptcha-reload-button")
                 if reload_btn.count() > 0 and reload_btn.is_visible():
+                    # Check if reload button is also disabled (full lockout)
+                    reload_classes = reload_btn.get_attribute("class") or ""
+                    reload_disabled = reload_btn.is_disabled() or "rc-button-disabled" in reload_classes
+                    if reload_disabled:
+                        logger.warning(
+                            "Reload button is also disabled — Google has fully locked out "
+                            "this session. Skipping remaining audio attempts."
+                        )
+                        break  # No point retrying, the entire challenge is locked
+
                     _human_delay(0.5, 1.5)
-                    reload_btn.click()
+                    reload_btn.click(force=True)
                     _human_delay(2.0, 4.0)
 
                     # After reload, the audio button might be re-enabled
