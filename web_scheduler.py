@@ -4,9 +4,14 @@ Automated RU Meal Scheduling Module via Web Portal and Playwright.
 Bypasses:
   1. Internal image captcha (/ru/usuario/captcha.html) using local ONNX-based ddddocr.
   2. Google reCAPTCHA v2 using audio challenge transcription via faster-whisper.
+
+Anti-detection:
+  - playwright-stealth patches (navigator.webdriver, chrome runtime, plugins, etc.)
+  - Randomized human-like interaction delays and mouse movements.
 """
 import io
 import logging
+import random
 import re
 import time
 from datetime import datetime
@@ -17,6 +22,7 @@ import requests
 import ddddocr
 from faster_whisper import WhisperModel
 from playwright.sync_api import sync_playwright
+from playwright_stealth import Stealth
 
 logger = logging.getLogger(__name__)
 
@@ -80,33 +86,122 @@ def solve_text_captcha(img_bytes: bytes) -> str:
     return re.sub(r"[^a-z0-9]", "", text)
 
 
+def _human_delay(min_s: float = 0.5, max_s: float = 2.0) -> None:
+    """Random delay that mimics natural human reaction time."""
+    time.sleep(random.uniform(min_s, max_s))
+
+
+def _human_mouse_move(page, target_x: int, target_y: int, steps: int = 0) -> None:
+    """Moves the mouse to (target_x, target_y) with slight random offset."""
+    offset_x = random.randint(-5, 5)
+    offset_y = random.randint(-3, 3)
+    if steps == 0:
+        steps = random.randint(5, 15)
+    page.mouse.move(target_x + offset_x, target_y + offset_y, steps=steps)
+    _human_delay(0.1, 0.3)
+
+
+def _simulate_idle_activity(page) -> None:
+    """Performs minor idle gestures (scroll, mouse drift) to look human."""
+    action = random.choice(["scroll", "move", "none"])
+    if action == "scroll":
+        page.mouse.wheel(0, random.randint(-50, 80))
+        _human_delay(0.3, 0.8)
+    elif action == "move":
+        page.mouse.move(
+            random.randint(200, 800),
+            random.randint(200, 600),
+            steps=random.randint(3, 10),
+        )
+        _human_delay(0.2, 0.5)
+
+
+def _is_recaptcha_checked(anchor_frame) -> bool:
+    """Returns True if the reCAPTCHA checkbox shows a verified state."""
+    try:
+        return anchor_frame.locator(
+            ".recaptcha-checkbox-checked, [aria-checked='true']"
+        ).count() > 0
+    except Exception:
+        return False
+
+
 def solve_recaptcha(page, max_retries: int = 3) -> bool:
-    """Handles Google reCAPTCHA v2: 1-click pass or automated audio challenge solve."""
+    """Handles Google reCAPTCHA v2: 1-click pass or automated audio challenge solve.
+
+    Strategy:
+      1. Simulate human-like mouse approach to the checkbox.
+      2. Click and wait with realistic timing for a 1-click pass.
+      3. If challenged, attempt audio solve with disabled-button detection.
+      4. If the audio button is disabled (Google blocked it), reload the
+         challenge frame via the "get a new challenge" button.
+    """
     anchor_frame = page.frame_locator("iframe[src*='api2/anchor']")
     recaptcha_box = anchor_frame.locator("#recaptcha-anchor")
+
+    # Approach the checkbox with human-like mouse movement
+    try:
+        box = recaptcha_box.bounding_box()
+        if box:
+            _human_mouse_move(page, int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+    except Exception:
+        pass
+
+    _human_delay(0.3, 0.8)
     recaptcha_box.click()
-    time.sleep(2)
+    _human_delay(2.0, 4.0)
 
     # Check if 1-click pass was granted
-    if anchor_frame.locator(".recaptcha-checkbox-checked, [aria-checked='true']").count() > 0:
+    if _is_recaptcha_checked(anchor_frame):
         logger.info("reCAPTCHA passed immediately via 1-click!")
         return True
 
     # Audio challenge fallback
     bframe = page.frame_locator("iframe[src*='api2/bframe']")
+
     for attempt in range(1, max_retries + 1):
         try:
             audio_btn = bframe.locator("#recaptcha-audio-button")
+
             if audio_btn.count() == 0 or not audio_btn.is_visible():
                 logger.warning("Audio challenge button not available on attempt %d", attempt)
-                time.sleep(1)
+                _human_delay(1.0, 2.0)
                 continue
 
-            logger.info("Clicking reCAPTCHA audio challenge button (attempt %d/%d)...", attempt, max_retries)
-            audio_btn.click()
-            time.sleep(2)
+            # Detect if the audio button is disabled (Google blocked audio channel)
+            btn_classes = audio_btn.get_attribute("class") or ""
+            is_disabled = audio_btn.is_disabled() or "rc-button-disabled" in btn_classes
 
-            audio_src = bframe.locator("#audio-source").get_attribute("src", timeout=5000)
+            if is_disabled:
+                logger.warning(
+                    "Audio button is disabled (bot detection triggered) on attempt %d. "
+                    "Requesting a new challenge...", attempt,
+                )
+                # Try to get a fresh challenge by clicking the reload button
+                reload_btn = bframe.locator("#recaptcha-reload-button")
+                if reload_btn.count() > 0 and reload_btn.is_visible():
+                    _human_delay(0.5, 1.5)
+                    reload_btn.click()
+                    _human_delay(2.0, 4.0)
+
+                    # After reload, the audio button might be re-enabled
+                    btn_classes = audio_btn.get_attribute("class") or ""
+                    is_disabled = audio_btn.is_disabled() or "rc-button-disabled" in btn_classes
+                    if is_disabled:
+                        logger.warning("Audio button still disabled after challenge reload.")
+                        _human_delay(2.0, 3.0)
+                        continue
+                else:
+                    _human_delay(1.0, 2.0)
+                    continue
+
+            logger.info("Clicking reCAPTCHA audio challenge button (attempt %d/%d)...", attempt, max_retries)
+            _simulate_idle_activity(page)
+            audio_btn.click()
+            _human_delay(2.0, 4.0)
+
+            # Wait longer for the audio source to appear (increased from 5s to 10s)
+            audio_src = bframe.locator("#audio-source").get_attribute("src", timeout=10000)
             if not audio_src:
                 logger.warning("Could not obtain audio source URL.")
                 continue
@@ -128,13 +223,20 @@ def solve_recaptcha(page, max_retries: int = 3) -> bool:
                 logger.warning("Empty transcription from audio challenge.")
                 continue
 
-            # Submit transcription to reCAPTCHA
-            bframe.locator("#audio-response").fill(transcribed_text)
+            # Type transcription with human-like per-character delay
+            response_field = bframe.locator("#audio-response")
+            response_field.click()
+            _human_delay(0.3, 0.6)
+            response_field.fill("")  # clear first
+            for char in transcribed_text:
+                response_field.type(char, delay=random.randint(50, 150))
+
+            _human_delay(0.5, 1.5)
             bframe.locator("#recaptcha-verify-button").click()
-            time.sleep(2)
+            _human_delay(2.0, 4.0)
 
             # Check if verified
-            if anchor_frame.locator(".recaptcha-checkbox-checked, [aria-checked='true']").count() > 0:
+            if _is_recaptcha_checked(anchor_frame):
                 logger.info("reCAPTCHA successfully solved via audio challenge!")
                 return True
 
@@ -145,7 +247,7 @@ def solve_recaptcha(page, max_retries: int = 3) -> bool:
 
         except Exception as exc:
             logger.warning("Error during reCAPTCHA audio solve attempt %d: %s", attempt, exc)
-            time.sleep(1)
+            _human_delay(1.0, 2.0)
 
     return False
 
@@ -178,7 +280,7 @@ def schedule_meals_web(
 
     logger.info("Starting automated web scheduling for %s at restaurant %s. Meals: %s", date_str, rest_id_str, meals)
 
-    with sync_playwright() as p:
+    with Stealth().use_sync(sync_playwright()) as p:
         browser = p.chromium.launch(
             headless=True,
             args=[
@@ -186,11 +288,19 @@ def schedule_meals_web(
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--window-size=1280,900",
             ]
         )
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
             viewport={"width": 1280, "height": 900},
+            locale="pt-BR",
+            timezone_id="America/Sao_Paulo",
         )
         page = context.new_page()
         # Automatically accept confirmation dialogs (e.g. dinner time limit reminder)
