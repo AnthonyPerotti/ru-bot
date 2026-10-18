@@ -11,6 +11,7 @@ Anti-detection:
 """
 import io
 import logging
+import os
 import random
 import re
 import time
@@ -50,6 +51,18 @@ MEAL_PORTAL_IDS = {
 # Lazy-loaded singletons
 _ocr: Optional[ddddocr.DdddOcr] = None
 _whisper: Optional[WhisperModel] = None
+
+
+def get_browser_user_data_dir() -> str:
+    """Returns persistent profile directory for Chromium to preserve session and trust score."""
+    if os.path.exists("/app/data"):
+        profile_dir = "/app/data/browser_profile"
+    elif os.path.exists("data"):
+        profile_dir = os.path.abspath("data/browser_profile")
+    else:
+        profile_dir = os.path.abspath(".browser_profile")
+    os.makedirs(profile_dir, exist_ok=True)
+    return profile_dir
 
 
 def get_ocr() -> ddddocr.DdddOcr:
@@ -256,6 +269,16 @@ def solve_recaptcha(page, max_retries: int = 3) -> bool:
                 logger.warning("reCAPTCHA audio verification error: %s", err_msg)
 
         except Exception as exc:
+            try:
+                frame_text = bframe.locator("body").inner_text(timeout=2000)
+                if "consultas automáticas" in frame_text or "automated queries" in frame_text:
+                    logger.warning(
+                        "Google reCAPTCHA DosCaptcha detected on attempt %d: "
+                        "'Your computer or network may be sending automated queries'.",
+                        attempt,
+                    )
+            except Exception:
+                pass
             logger.warning("Error during reCAPTCHA audio solve attempt %d: %s", attempt, exc)
             _human_delay(1.0, 2.0)
 
@@ -290,19 +313,24 @@ def schedule_meals_web(
 
     logger.info("Starting automated web scheduling for %s at restaurant %s. Meals: %s", date_str, rest_id_str, meals)
 
+    user_data_dir = get_browser_user_data_dir()
+    logger.info("Using persistent browser profile at: %s", user_data_dir)
+
     with Stealth().use_sync(sync_playwright()) as p:
-        browser = p.chromium.launch(
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
             headless=True,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
-                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-features=IsolateOrigins,site-per-process,AudioServiceOutOfProcess",
                 "--window-size=1280,900",
-            ]
-        )
-        context = browser.new_context(
+                "--mute-audio=false",
+                "--autoplay-policy=no-user-gesture-required",
+                "--no-default-browser-check",
+            ],
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -312,7 +340,7 @@ def schedule_meals_web(
             locale="pt-BR",
             timezone_id="America/Sao_Paulo",
         )
-        page = context.new_page()
+        page = context.pages[0] if context.pages else context.new_page()
         # Automatically accept confirmation dialogs (e.g. dinner time limit reminder)
         page.on("dialog", lambda dialog: dialog.accept())
 
@@ -372,7 +400,7 @@ def schedule_meals_web(
 
             if not checked_any:
                 logger.error("No valid meal checkboxes could be checked on the form.")
-                browser.close()
+                context.close()
                 return results
 
             # Step 6: Set vegetarian preference
@@ -398,7 +426,7 @@ def schedule_meals_web(
 
             if not captcha_code:
                 logger.error("Could not obtain a valid 6-character captcha after 10 attempts.")
-                browser.close()
+                context.close()
                 return results
 
             logger.info("Internal captcha solved: '%s'", captcha_code)
@@ -408,7 +436,7 @@ def schedule_meals_web(
             recaptcha_passed = solve_recaptcha(page)
             if not recaptcha_passed:
                 logger.error("Failed to solve Google reCAPTCHA v2.")
-                browser.close()
+                context.close()
                 return results
 
             # Step 9: Submit form
@@ -445,7 +473,10 @@ def schedule_meals_web(
             except Exception:
                 pass
         finally:
-            browser.close()
+            try:
+                context.close()
+            except Exception:
+                pass
 
     return results
 
