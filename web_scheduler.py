@@ -76,8 +76,8 @@ def get_ocr() -> ddddocr.DdddOcr:
 def get_whisper() -> WhisperModel:
     global _whisper
     if _whisper is None:
-        logger.info("Loading faster-whisper (tiny) speech recognition model...")
-        _whisper = WhisperModel("tiny", device="cpu", compute_type="int8")
+        logger.info("Loading faster-whisper (base) speech recognition model...")
+        _whisper = WhisperModel("base", device="cpu", compute_type="int8")
     return _whisper
 
 
@@ -238,13 +238,20 @@ def solve_recaptcha(page, max_retries: int = 3) -> bool:
             # Transcribe audio with Whisper
             whisper = get_whisper()
             audio_file = io.BytesIO(resp.content)
-            segments, _ = whisper.transcribe(audio_file, beam_size=5)
-            transcribed_text = " ".join([s.text for s in segments]).strip().lower()
-            logger.info("Transcribed reCAPTCHA audio text: '%s'", transcribed_text)
+            segments, info = whisper.transcribe(audio_file, beam_size=5, language="en")
+            raw_text = " ".join([s.text for s in segments]).strip().lower()
 
-            if not transcribed_text:
+            # Clean up Whisper artifacts: remove punctuation, extra spaces,
+            # and common hallucinated filler phrases
+            cleaned = re.sub(r"[^\w\s]", "", raw_text)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            logger.info("Transcribed reCAPTCHA audio: raw='%s' cleaned='%s'", raw_text, cleaned)
+
+            if not cleaned:
                 logger.warning("Empty transcription from audio challenge.")
                 continue
+
+            transcribed_text = cleaned
 
             # Type transcription with human-like per-character delay
             response_field = bframe.locator("#audio-response")
@@ -343,6 +350,16 @@ def schedule_meals_web(
         page = context.pages[0] if context.pages else context.new_page()
         # Automatically accept confirmation dialogs (e.g. dinner time limit reminder)
         page.on("dialog", lambda dialog: dialog.accept())
+
+        # Clear Google reCAPTCHA cookies to reset trust score from previous failed sessions
+        try:
+            cookies = context.cookies()
+            google_cookies = [c for c in cookies if "google" in c.get("domain", "")]
+            if google_cookies:
+                context.clear_cookies(domains=["google.com", ".google.com", "www.google.com", "recaptcha.net", ".recaptcha.net"])
+                logger.info("Cleared %d Google/reCAPTCHA cookies to reset trust score.", len(google_cookies))
+        except Exception:
+            pass
 
         try:
             # Step 1: Login

@@ -11,9 +11,11 @@ O projeto e composto por:
 ## Arquitetura e Regras de Negocio
 
 O bot monitora os prazos oficiais estabelecidos pela UFSM para cada tipo de refeicao:
-- Jantar: agendado as 11:30 do proprio dia (limite 11:30).
-- Cafe da manha: agendado as 13:00 do dia anterior (limite 13:00).
-- Almoco: agendado as 22:00 do dia anterior (limite 22:00).
+- Jantar: agendado a partir da meia-noite do proprio dia (limite 11:30).
+- Cafe da manha: agendado a partir da 01:00 do dia anterior (limite 13:00).
+- Almoco: agendado a partir das 10:00 do dia anterior (limite 22:00).
+
+O agendador tenta a cada 15 minutos ate conseguir ou atingir o prazo, com ate 50 tentativas por refeicao.
 
 ### Regras de Restaurantes (RU I vs RU II)
 - RU I (Campus I): oferece Cafe da manha, Almoco e Jantar.

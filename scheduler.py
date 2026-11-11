@@ -421,28 +421,28 @@ def _check_and_consume_trigger(config_path: str) -> bool:
 
 
 # Scheduling rules per meal type:
-# - start: (hour, minute) when the initial attempt window opens
+# - start: (hour, minute) when the initial attempt window opens (~12h before deadline)
 # - deadline: (hour, minute) hard deadline enforced by the UFSM portal
-# - max_attempts: total scheduling rounds allowed per day (at least 3 retries spaced 1h apart)
-# - retry_interval_minutes: minimum interval in minutes between failed attempts
+# - max_attempts: generous cap to allow retries every 15 minutes across the full window
+# - retry_interval_minutes: minimum interval in minutes between failed attempt rounds
 MEAL_RULES = {
     "dinner": {
-        "start": (7, 30),
+        "start": (0, 0),
         "deadline": (11, 30),
-        "max_attempts": 5,
-        "retry_interval_minutes": 60,
+        "max_attempts": 50,
+        "retry_interval_minutes": 15,
     },
     "coffee": {
-        "start": (8, 0),
+        "start": (1, 0),
         "deadline": (13, 0),
-        "max_attempts": 5,
-        "retry_interval_minutes": 60,
+        "max_attempts": 50,
+        "retry_interval_minutes": 15,
     },
     "lunch": {
-        "start": (17, 0),
+        "start": (10, 0),
         "deadline": (22, 0),
-        "max_attempts": 5,
-        "retry_interval_minutes": 60,
+        "max_attempts": 50,
+        "retry_interval_minutes": 15,
     },
 }
 
@@ -456,8 +456,9 @@ def run_daemon_loop(config_path: str = "config.json") -> None:
       - Coffee  -> 13:00 (next day, scheduled on previous day)
       - Lunch   -> 22:00 (next day, scheduled on previous day)
 
-    Attempts start several hours before the deadline and retry every 60 minutes
-    on failure (up to 5 attempts per meal), ensuring multiple spaced retry windows.
+    Attempts start ~12 hours before the deadline and retry every 15 minutes
+    on failure (up to 50 attempts per meal), maximizing chances of solving
+    reCAPTCHA before the portal closes.
     """
     logger.info("RU Bot daemon started. Running in continuous mode (America/Sao_Paulo).")
 
@@ -521,9 +522,9 @@ def run_daemon_loop(config_path: str = "config.json") -> None:
                     last_attempt = meal_state["last_attempt"]
                     if last_attempt is not None:
                         elapsed = (now - last_attempt).total_seconds() / 60
-                        # Standard 1-hour retry, or emergency final retry 20m before deadline
+                        # Check if enough time elapsed since last attempt
                         minutes_to_deadline = deadline_minutes - current_minutes
-                        if elapsed >= retry_interval or (minutes_to_deadline <= 20 and elapsed >= 15):
+                        if elapsed >= retry_interval or (minutes_to_deadline <= 20 and elapsed >= 10):
                             should_run = True
 
                 if should_run:
