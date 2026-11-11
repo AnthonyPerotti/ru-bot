@@ -1,10 +1,9 @@
-FROM python:3.12-slim-bookworm
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
 
 # Set environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TZ=America/Sao_Paulo \
-    PATH="/root/.local/bin:$PATH"
+    TZ=America/Sao_Paulo
 
 WORKDIR /app
 
@@ -17,9 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright Chromium with system dependencies
-RUN python -m playwright install --with-deps chromium
 
 # Pre-cache Whisper base model during build
 RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
