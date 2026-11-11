@@ -3,7 +3,8 @@ FROM python:3.12-slim-bookworm
 # Set environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    TZ=America/Sao_Paulo
+    TZ=America/Sao_Paulo \
+    PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
 
@@ -18,10 +19,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright Chromium with system dependencies
-RUN playwright install --with-deps chromium
+RUN python -m playwright install --with-deps chromium
 
-# Pre-cache Whisper tiny model during build
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('tiny', device='cpu', compute_type='int8')"
+# Pre-cache Whisper base model during build
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
 
 # Copy application files
 COPY . .
