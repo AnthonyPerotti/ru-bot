@@ -91,7 +91,7 @@ ru-bot/
 ├── scheduler.py            # Agendador continuo (daemon) e pontual (--once)
 ├── web_scheduler.py        # Modulo de agendamento web com resolucao de captchas
 ├── requirements.txt        # Dependencias Python
-├── Dockerfile              # Imagem Docker com Playwright e Whisper
+├── Dockerfile              # Imagem Docker leve com Python slim
 ├── docker-compose.yml      # Definicao do servico para Docker / Homelab / ZimaOS
 ├── iniciar.bat             # Inicializador automatico para Windows
 ├── iniciar.sh              # Inicializador automatico para Linux / macOS

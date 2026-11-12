@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+FROM python:3.12-slim-bookworm
 
 # Set environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,9 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Pre-cache Whisper base model during build
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
 
 # Copy application files
 COPY . .
